@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using System.IO;
 
 public class GameManager : MonoBehaviour
 {
@@ -22,7 +23,8 @@ public class GameManager : MonoBehaviour
     [System.Serializable]
     public class PrizeConfig
     {
-        public string name;
+        public string id;                 // identificador único (ej: "TAZAS")
+        public string name;              // texto visible
         public PrizeCategory category;
         public float weight = 1f;
         public int initialStock = 10;
@@ -49,10 +51,25 @@ public class GameManager : MonoBehaviour
     [Header("Alignment")]
     public float pointerOffsetAngle = 0f;   // en grados, ajustable en el inspector
 
+    [Header("Config externa")]
+    public bool useExternalMode = true;    // ¿leer modo desde Data/modo.txt?
+    public float modePollInterval = 10f;   // segundos entre lecturas
+    [Tooltip("Modo actual efectivo (se actualiza desde modo.txt si useExternalMode=true)")]
+    public int currentMode = 3;            // 1=Pequeños, 2=Grandes, 3=Normal
+
 
     [Header("Modo de Juego")]
     [Range(1, 3)]
     public int mode = 3;
+
+    [Header("Modo 2 - Probabilidades por categoría")]
+    [Range(0f, 1f)]
+    public float mode2SmallProbability = 0.8f;   // 80% pequeños
+    [Range(0f, 1f)]
+    public float mode2MediumProbability = 0.1f;  // 10% medianos
+    [Range(0f, 1f)]
+    public float mode2LargeProbability = 0.1f;   // 10% grandes
+
 
     [Header("Premios (en el mismo orden que los segmentos)")]
     public List<PrizeConfig> prizes = new List<PrizeConfig>();
@@ -60,9 +77,15 @@ public class GameManager : MonoBehaviour
     private int[] remainingStock;
     private GameState state = GameState.Idle;
     private int lastResultIndex = -1;
+    private int indexSuerteProxima = -1;
+
 
     void Start()
     {
+        // Mostrar fecha del sistema
+        string today = System.DateTime.Today.ToString("yyyy-MM-dd");
+        Debug.Log("[GameManager] Fecha del sistema detectada: " + today);
+
         if (popupResultado != null)
             popupResultado.SetActive(false);
 
@@ -72,19 +95,59 @@ public class GameManager : MonoBehaviour
         if (wheelBuilder == null)
             Debug.LogError("GameManager: Asigna wheelBuilder (en WheelRoot).");
 
-        if (prizes == null || prizes.Count == 0)
-            Debug.LogWarning("GameManager: La lista de prizes está vacía. Configúrala en el Inspector.");
+        if (prizes == null)
+            prizes = new List<PrizeConfig>();
 
-        remainingStock = new int[prizes.Count];
-        for (int i = 0; i < prizes.Count; i++)
+        // 1) Cargar premios desde JSON (si existe)
+        InventoryService.LoadPrizesFromJson(ref prizes);
+
+        if (prizes.Count == 0)
         {
-            remainingStock[i] = Mathf.Max(0, prizes[i].initialStock);
+            Debug.LogError("GameManager: No hay premios configurados ni en el Inspector ni en premios.json.");
+            return;
         }
 
-        // Sincronizar ruleta con la lista de premios
+        // 2) Stock base desde inventario.csv (si no existe, usa initialStock)
+        int[] baseStock = InventoryService.LoadInventoryForToday(prizes);
+
+        // 3) Aplicar estado guardado (state.json), si existe y es del día
+        remainingStock = InventoryService.ApplySavedState(prizes, baseStock);
+
+        // 4) Sincronizar ruleta con la lista de premios
         SyncWheelWithPrizes();
 
+        // 5) Modo
+        currentMode = Mathf.Clamp(mode, 1, 3);
+
+        if (useExternalMode)
+        {
+            LoadModeFromFile();
+            StartCoroutine(ModeWatcherCoroutine());
+        }
+
+        // Buscar el índice del premio "suerte para la próxima"
+        indexSuerteProxima = -1;
+        for (int i = 0; i < prizes.Count; i++)
+        {
+            if (!string.IsNullOrEmpty(prizes[i].id) &&
+                string.Equals(prizes[i].id, "SUERTEPROXIMA", System.StringComparison.OrdinalIgnoreCase))
+            {
+                indexSuerteProxima = i;
+                break;
+            }
+        }
+
+        if (indexSuerteProxima >= 0)
+        {
+            Debug.Log("[GameManager] Premio SUERTEPROXIMA encontrado en índice: " + indexSuerteProxima);
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] No se encontró premio con id = SUERTEPROXIMA. El modo 'solo suerte' no podrá activarse.");
+        }
+
         state = GameState.Idle;
+
     }
 
 #if UNITY_EDITOR
@@ -141,22 +204,46 @@ public class GameManager : MonoBehaviour
 
     void OnStartSpinRequested()
     {
-        int totalStock = 0;
         if (remainingStock == null || remainingStock.Length == 0)
         {
             Debug.LogWarning("GameManager: remainingStock no inicializado.");
             return;
         }
 
+        // 1) Calcular stock REAL (todos menos SUERTEPROXIMA)
+        int totalRealStock = 0;
+        for (int i = 0; i < remainingStock.Length; i++)
+        {
+            if (i == indexSuerteProxima) continue; // ignoramos "suerte para la próxima"
+            totalRealStock += remainingStock[i];
+        }
+
+        // 2) Caso: ya no hay premios reales, pero sí tenemos SUERTEPROXIMA
+        if (totalRealStock <= 0 && indexSuerteProxima >= 0)
+        {
+            if (remainingStock[indexSuerteProxima] <= 0)
+            {
+                Debug.LogWarning("GameManager: Solo queda SUERTEPROXIMA pero su stock es 0. No se puede continuar.");
+                return;
+            }
+
+            Debug.Log("[GameManager] Sin stock de premios reales. Solo se entregará SUERTEPROXIMA.");
+            StartCoroutine(SpinAndShow(indexSuerteProxima));
+            return;
+        }
+
+        // 3) Caso: no hay NADA de stock (ni reales ni SUERTEPROXIMA)
+        int totalStock = 0;
         for (int i = 0; i < remainingStock.Length; i++)
             totalStock += remainingStock[i];
 
         if (totalStock <= 0)
         {
-            Debug.LogWarning("GameManager: Sin stock disponible de premios.");
+            Debug.LogWarning("GameManager: Sin stock disponible de ningún premio (incluyendo SUERTEPROXIMA).");
             return;
         }
 
+        // 4) Caso normal: hay premios reales → usar lógica normal de selección
         int chosenIndex = ChoosePrizeIndex();
         if (chosenIndex < 0)
         {
@@ -167,62 +254,152 @@ public class GameManager : MonoBehaviour
         StartCoroutine(SpinAndShow(chosenIndex));
     }
 
+
     int ChoosePrizeIndex()
     {
-        List<int> candidates = new List<int>();
+        // Separar candidatos por categoría
+        List<int> small = new List<int>();
+        List<int> medium = new List<int>();
+        List<int> large = new List<int>();
 
         for (int i = 0; i < prizes.Count; i++)
         {
             if (remainingStock[i] <= 0) continue;
 
-            switch (mode)
+            switch (prizes[i].category)
             {
-                case 1:
-                    if (prizes[i].category != PrizeCategory.Small) continue;
+                case PrizeCategory.Small:
+                    small.Add(i);
                     break;
-                case 2:
-                    if (prizes[i].category != PrizeCategory.Large) continue;
+                case PrizeCategory.Medium:
+                    medium.Add(i);
                     break;
-                case 3:
+                case PrizeCategory.Large:
+                    large.Add(i);
                     break;
-            }
-
-            candidates.Add(i);
-        }
-
-        if (candidates.Count == 0)
-        {
-            for (int i = 0; i < prizes.Count; i++)
-            {
-                if (remainingStock[i] > 0)
-                    candidates.Add(i);
             }
         }
 
-        if (candidates.Count == 0) return -1;
+        // Si no hay nada de stock, devolvemos -1
+        if (small.Count == 0 && medium.Count == 0 && large.Count == 0)
+            return -1;
 
-        float totalWeight = 0f;
-        foreach (int idx in candidates)
-            totalWeight += Mathf.Max(0f, prizes[idx].weight);
-
-        if (totalWeight <= 0f)
+        // Helper local para elegir con peso dentro de una lista de índices
+        int ChooseWeightedFrom(List<int> indices)
         {
-            return candidates[Random.Range(0, candidates.Count)];
+            if (indices == null || indices.Count == 0) return -1;
+
+            float totalWeight = 0f;
+            foreach (int idx in indices)
+                totalWeight += Mathf.Max(0f, prizes[idx].weight);
+
+            if (totalWeight <= 0f)
+            {
+                // Todos tienen peso 0 → elegir uno al azar
+                return indices[Random.Range(0, indices.Count)];
+            }
+
+            float r = Random.Range(0f, totalWeight);
+            float accum = 0f;
+
+            foreach (int idx in indices)
+            {
+                float w = Mathf.Max(0f, prizes[idx].weight);
+                accum += w;
+                if (r <= accum)
+                    return idx;
+            }
+
+            return indices[indices.Count - 1];
         }
 
-        float r = Random.Range(0f, totalWeight);
-        float accum = 0f;
-
-        foreach (int idx in candidates)
+        // ---------- Lógica por modo ----------
+        switch (currentMode)
         {
-            float w = Mathf.Max(0f, prizes[idx].weight);
-            accum += w;
-            if (r <= accum)
-                return idx;
-        }
+            // Modo 1: solo Small
+            case 1:
+                {
+                    int idx = ChooseWeightedFrom(small);
+                    if (idx >= 0) return idx;
 
-        return candidates[candidates.Count - 1];
+                    // fallback si no hay small: cualquier cosa con stock
+                    List<int> all = new List<int>();
+                    all.AddRange(small);
+                    all.AddRange(medium);
+                    all.AddRange(large);
+                    return ChooseWeightedFrom(all);
+                }
+
+            // Modo 2: probabilidades específicas Small / Medium / Large
+            case 2:
+                {
+                    bool hasSmall = small.Count > 0;
+                    bool hasMedium = medium.Count > 0;
+                    bool hasLarge = large.Count > 0;
+
+                    // Probabilidades configuradas en el inspector
+                    float pSmall = hasSmall ? Mathf.Max(0f, mode2SmallProbability) : 0f;
+                    float pMedium = hasMedium ? Mathf.Max(0f, mode2MediumProbability) : 0f;
+                    float pLarge = hasLarge ? Mathf.Max(0f, mode2LargeProbability) : 0f;
+
+                    // Si ninguna categoría disponible tiene prob > 0, fallback a todas
+                    float sum = pSmall + pMedium + pLarge;
+                    if (sum <= 0f)
+                    {
+                        List<int> all = new List<int>();
+                        all.AddRange(small);
+                        all.AddRange(medium);
+                        all.AddRange(large);
+                        return ChooseWeightedFrom(all);
+                    }
+
+                    // Normalizar para que sumen 1 (pero solo entre las que están disponibles)
+                    pSmall /= sum;
+                    pMedium /= sum;
+                    pLarge /= sum;
+
+                    float r = Random.value;
+
+                    // Elegir categoría según r
+                    List<int> chosenList = null;
+
+                    if (r < pSmall)
+                    {
+                        chosenList = small;
+                    }
+                    else if (r < pSmall + pMedium)
+                    {
+                        chosenList = medium;
+                    }
+                    else
+                    {
+                        chosenList = large;
+                    }
+
+                    int idxCat = ChooseWeightedFrom(chosenList);
+                    if (idxCat >= 0) return idxCat;
+
+                    // Fallback por si la lista elegida está vacía (por algún cambio de stock inesperado)
+                    List<int> all2 = new List<int>();
+                    all2.AddRange(small);
+                    all2.AddRange(medium);
+                    all2.AddRange(large);
+                    return ChooseWeightedFrom(all2);
+                }
+
+            // Modo 3: normal, todas las categorías juntas según weight
+            case 3:
+            default:
+                {
+                    List<int> all = new List<int>();
+                    all.AddRange(small);
+                    all.AddRange(medium);
+                    all.AddRange(large);
+                    return ChooseWeightedFrom(all);
+                }
+        }
     }
+
 
     IEnumerator SpinAndShow(int prizeIndex)
     {
@@ -274,8 +451,15 @@ public class GameManager : MonoBehaviour
 
         wheelRoot.localRotation = Quaternion.Euler(0f, 0f, targetBaseAngle);
 
-        remainingStock[prizeIndex] = Mathf.Max(0, remainingStock[prizeIndex] - 1);
+        //remainingStock[prizeIndex] = Mathf.Max(0, remainingStock[prizeIndex] - 1);
+        if (prizeIndex != indexSuerteProxima)
+        {
+            remainingStock[prizeIndex] = Mathf.Max(0, remainingStock[prizeIndex] - 1);
+        }
+
         lastResultIndex = prizeIndex;
+
+        InventoryService.SaveState(prizes, remainingStock);
 
         ShowPopup(prizes[prizeIndex].name);
 
@@ -299,4 +483,71 @@ public class GameManager : MonoBehaviour
         if (popupResultado != null)
             popupResultado.SetActive(false);
     }
+
+    void LoadModeFromFile()
+    {
+        try
+        {
+            string path = DataPaths.ModeFilePath;   // usa el helper DataPaths
+
+            if (!File.Exists(path))
+            {
+#if UNITY_EDITOR
+                Debug.LogWarning("[GameManager] modo.txt no encontrado en " + path + ". Se mantiene currentMode=" + currentMode);
+#endif
+                return;
+            }
+
+            string txt = File.ReadAllText(path).Trim();
+
+            if (int.TryParse(txt, out int newMode))
+            {
+                if (newMode >= 1 && newMode <= 3)
+                {
+                    if (newMode != currentMode)
+                    {
+                        int previous = currentMode;
+                        currentMode = newMode;
+
+#if UNITY_EDITOR
+                        Debug.Log($"[GameManager] 🔄 Cambio de modo detectado: {previous} → {currentMode}");
+#endif
+                    }
+                    else
+                    {
+#if UNITY_EDITOR
+                        Debug.Log($"[GameManager] Modo leído ({newMode}) pero no cambió.");
+#endif
+                    }
+                }
+                else
+                {
+#if UNITY_EDITOR
+                    Debug.LogWarning("[GameManager] Valor fuera de rango en modo.txt: " + txt + ". Debe ser 1, 2 o 3.");
+#endif
+                }
+            }
+            else
+            {
+#if UNITY_EDITOR
+                Debug.LogWarning("[GameManager] No se pudo parsear modo.txt: " + txt);
+#endif
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("[GameManager] Error leyendo modo.txt: " + ex.Message);
+        }
+    }
+
+    IEnumerator ModeWatcherCoroutine()
+    {
+        while (useExternalMode)
+        {
+            LoadModeFromFile();
+            yield return new WaitForSeconds(modePollInterval);
+        }
+    }
+
+
 }

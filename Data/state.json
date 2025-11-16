@@ -1,0 +1,117 @@
+{
+    "date": "2025-11-16",
+    "prizes": [
+        {
+            "id": "TAZAS",
+            "remaining": 1000
+        },
+        {
+            "id": "BOMBILLOS",
+            "remaining": 2000
+        },
+        {
+            "id": "SUPEREXITO-20",
+            "remaining": 168
+        },
+        {
+            "id": "SUPEREXITO-25",
+            "remaining": 1
+        },
+        {
+            "id": "DMUJERES-20",
+            "remaining": 27
+        },
+        {
+            "id": "POLIPAPEL-10",
+            "remaining": 25
+        },
+        {
+            "id": "KRISPYKREME",
+            "remaining": 544
+        },
+        {
+            "id": "TRIODONAS",
+            "remaining": 218
+        },
+        {
+            "id": "ENTRADASCINE",
+            "remaining": 650
+        },
+        {
+            "id": "PARRILLAASADORA",
+            "remaining": 8
+        },
+        {
+            "id": "AIRFRYER",
+            "remaining": 8
+        },
+        {
+            "id": "LICUADORA",
+            "remaining": 8
+        },
+        {
+            "id": "SANDUCHERA",
+            "remaining": 2
+        },
+        {
+            "id": "OLLAARROCERA",
+            "remaining": 1
+        },
+        {
+            "id": "BATIDORAMANO",
+            "remaining": 3
+        },
+        {
+            "id": "PARRILLASANDUCHERA",
+            "remaining": 1
+        },
+        {
+            "id": "SPLIT",
+            "remaining": 1
+        },
+        {
+            "id": "TV65",
+            "remaining": 0
+        },
+        {
+            "id": "TV55",
+            "remaining": 2
+        },
+        {
+            "id": "PARLANTERECARGABLE",
+            "remaining": 6
+        },
+        {
+            "id": "CELULARREDNI",
+            "remaining": 0
+        },
+        {
+            "id": "REFRIGERADORA",
+            "remaining": 0
+        },
+        {
+            "id": "MIMOSAFRUTOSROJOS",
+            "remaining": 24
+        },
+        {
+            "id": "GRANDDUVALBLANCO375CC",
+            "remaining": 144
+        },
+        {
+            "id": "GRANDDUVAL750CC",
+            "remaining": 1
+        },
+        {
+            "id": "MONTSANT",
+            "remaining": 240
+        },
+        {
+            "id": "SIDRAL",
+            "remaining": 172
+        },
+        {
+            "id": "SUERTEPROXIMA",
+            "remaining": 1500
+        }
+    ]
+}

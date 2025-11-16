@@ -1,0 +1,200 @@
+{
+  "prizes": [
+    {
+      "id": "TAZAS",
+      "name": "TAZAS PERSONALIZADAS",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 1000
+    },
+    {
+      "id": "BOMBILLOS",
+      "name": "BOMBILLOS PERSONALIZADOS",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 2000
+    },
+    {
+      "id": "SUPEREXITO-20",
+      "name": "OC SUPER ÉXITO $20",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 170
+    },
+    {
+      "id": "SUPEREXITO-25",
+      "name": "OC SUPER ÉXITO $25",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 2
+    },
+    {
+      "id": "DMUJERES-20",
+      "name": "OC DMUJERES $20",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 30
+    },
+    {
+      "id": "POLIPAPEL-10",
+      "name": "OC POLIPAPEL $10",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 26
+    },
+    {
+      "id": "KRISPYKREME",
+      "name": "OC KRISPY KREME",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 545
+    },
+    {
+      "id": "TRIODONAS",
+      "name": "TRIO DE DONAS",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 220
+    },
+    {
+      "id": "ENTRADASCINE",
+      "name": "ENTRADAS AL CINE",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 650
+    },
+    {
+      "id": "PARRILLAASADORA",
+      "name": "PARRILLA ASADORA",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 8
+    },
+    {
+      "id": "AIRFRYER",
+      "name": "AIR FRYER",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 8
+    },
+    {
+      "id": "LICUADORA",
+      "name": "LICUADORA",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 8
+    },
+    {
+      "id": "SANDUCHERA",
+      "name": "SANDUCHERA",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 2
+    },
+    {
+      "id": "OLLAARROCERA",
+      "name": "OLLA ARROCERA",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 2
+    },
+    {
+      "id": "BATIDORAMANO",
+      "name": "BATIDORA DE MANO",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 3
+    },
+    {
+      "id": "PARRILLASANDUCHERA",
+      "name": "PARRILLA SANDUCHERA",
+      "category": "Medium",
+      "weight": 3,
+      "initialStock": 1
+    },
+    {
+      "id": "SPLIT",
+      "name": "SPLIT",
+      "category": "Large",
+      "weight": 1,
+      "initialStock": 4
+    },
+    {
+      "id": "TV65",
+      "name": "TV 65",
+      "category": "Large",
+      "weight": 1,
+      "initialStock": 1
+    },
+    {
+      "id": "TV55",
+      "name": "TV 55",
+      "category": "Large",
+      "weight": 1,
+      "initialStock": 4
+    },
+    {
+      "id": "PARLANTERECARGABLE",
+      "name": "PARLANTE RECARGABLE",
+      "category": "Large",
+      "weight": 1,
+      "initialStock": 10
+    },
+    {
+      "id": "CELULARREDNI",
+      "name": "CELULAR REDNI",
+      "category": "Large",
+      "weight": 1,
+      "initialStock": 1
+    },
+    {
+      "id": "REFRIGERADORA",
+      "name": "REFRIGERADORA",
+      "category": "Large",
+      "weight": 1,
+      "initialStock": 1
+    },
+    {
+      "id": "MIMOSAFRUTOSROJOS",
+      "name": "MIMOSA FRUTOS ROJOS",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 24
+    },
+    {
+      "id": "GRANDDUVALBLANCO375CC",
+      "name": "GRAND DUVAL BLANCO 375CC",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 144
+    },
+    {
+      "id": "GRANDDUVAL750CC",
+      "name": "GRAND DUVAL 750CC",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 5
+    },
+    {
+      "id": "MONTSANT",
+      "name": "MONTSANT",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 240
+    },
+    {
+      "id": "SIDRAL",
+      "name": "SIDRAL",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 173
+    },
+    {
+      "id": "SUERTEPROXIMA",
+      "name": "SUERTE PARA LA PRÓXIMA",
+      "category": "Small",
+      "weight": 10,
+      "initialStock": 1500
+    }
+  ]
+}
