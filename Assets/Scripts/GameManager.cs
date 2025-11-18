@@ -57,7 +57,6 @@ public class GameManager : MonoBehaviour
     [Tooltip("Modo actual efectivo (se actualiza desde modo.txt si useExternalMode=true)")]
     public int currentMode = 3;            // 1=Pequeños, 2=Grandes, 3=Normal
 
-
     [Header("Modo de Juego")]
     [Range(1, 3)]
     public int mode = 3;
@@ -70,15 +69,20 @@ public class GameManager : MonoBehaviour
     [Range(0f, 1f)]
     public float mode2LargeProbability = 0.1f;   // 10% grandes
 
-
     [Header("Premios (en el mismo orden que los segmentos)")]
     public List<PrizeConfig> prizes = new List<PrizeConfig>();
+
+    // AUDIO >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    [Header("Audio")]
+    public AudioSource audioSource;
+    public AudioClip spinClip;    // spinner.mp3
+    public AudioClip prizeClip;   // premio.mp3
+    // AUDIO <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
     private int[] remainingStock;
     private GameState state = GameState.Idle;
     private int lastResultIndex = -1;
     private int indexSuerteProxima = -1;
-
 
     void Start()
     {
@@ -97,6 +101,12 @@ public class GameManager : MonoBehaviour
 
         if (prizes == null)
             prizes = new List<PrizeConfig>();
+
+        // AUDIO (opcional: aviso si falta algo)
+        if (audioSource == null)
+        {
+            Debug.LogWarning("[GameManager] audioSource no asignado. No se reproducirá sonido.");
+        }
 
         // 1) Cargar premios desde JSON (si existe)
         InventoryService.LoadPrizesFromJson(ref prizes);
@@ -147,23 +157,18 @@ public class GameManager : MonoBehaviour
         }
 
         state = GameState.Idle;
-
     }
 
 #if UNITY_EDITOR
-    // Se llama cada vez que cambias algo en el inspector (en modo editor)
     void OnValidate()
     {
-        // Evitar errores si aún no se asigna wheelBuilder
         if (wheelBuilder == null) return;
         if (prizes == null || prizes.Count == 0) return;
 
-        // Sincronizar automáticamente cuando cambies nombres en el inspector
         SyncWheelWithPrizes();
     }
 #endif
 
-    // Context menu para forzar la sincronización manualmente si lo necesitas
     [ContextMenu("Sync Wheel From Prizes")]
     public void SyncWheelWithPrizes()
     {
@@ -254,10 +259,8 @@ public class GameManager : MonoBehaviour
         StartCoroutine(SpinAndShow(chosenIndex));
     }
 
-
     int ChoosePrizeIndex()
     {
-        // Separar candidatos por categoría
         List<int> small = new List<int>();
         List<int> medium = new List<int>();
         List<int> large = new List<int>();
@@ -280,11 +283,9 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Si no hay nada de stock, devolvemos -1
         if (small.Count == 0 && medium.Count == 0 && large.Count == 0)
             return -1;
 
-        // Helper local para elegir con peso dentro de una lista de índices
         int ChooseWeightedFrom(List<int> indices)
         {
             if (indices == null || indices.Count == 0) return -1;
@@ -295,7 +296,6 @@ public class GameManager : MonoBehaviour
 
             if (totalWeight <= 0f)
             {
-                // Todos tienen peso 0 → elegir uno al azar
                 return indices[Random.Range(0, indices.Count)];
             }
 
@@ -313,16 +313,13 @@ public class GameManager : MonoBehaviour
             return indices[indices.Count - 1];
         }
 
-        // ---------- Lógica por modo ----------
         switch (currentMode)
         {
-            // Modo 1: solo Small
             case 1:
                 {
                     int idx = ChooseWeightedFrom(small);
                     if (idx >= 0) return idx;
 
-                    // fallback si no hay small: cualquier cosa con stock
                     List<int> all = new List<int>();
                     all.AddRange(small);
                     all.AddRange(medium);
@@ -330,19 +327,16 @@ public class GameManager : MonoBehaviour
                     return ChooseWeightedFrom(all);
                 }
 
-            // Modo 2: probabilidades específicas Small / Medium / Large
             case 2:
                 {
                     bool hasSmall = small.Count > 0;
                     bool hasMedium = medium.Count > 0;
                     bool hasLarge = large.Count > 0;
 
-                    // Probabilidades configuradas en el inspector
                     float pSmall = hasSmall ? Mathf.Max(0f, mode2SmallProbability) : 0f;
                     float pMedium = hasMedium ? Mathf.Max(0f, mode2MediumProbability) : 0f;
                     float pLarge = hasLarge ? Mathf.Max(0f, mode2LargeProbability) : 0f;
 
-                    // Si ninguna categoría disponible tiene prob > 0, fallback a todas
                     float sum = pSmall + pMedium + pLarge;
                     if (sum <= 0f)
                     {
@@ -353,14 +347,11 @@ public class GameManager : MonoBehaviour
                         return ChooseWeightedFrom(all);
                     }
 
-                    // Normalizar para que sumen 1 (pero solo entre las que están disponibles)
                     pSmall /= sum;
                     pMedium /= sum;
                     pLarge /= sum;
 
                     float r = Random.value;
-
-                    // Elegir categoría según r
                     List<int> chosenList = null;
 
                     if (r < pSmall)
@@ -379,7 +370,6 @@ public class GameManager : MonoBehaviour
                     int idxCat = ChooseWeightedFrom(chosenList);
                     if (idxCat >= 0) return idxCat;
 
-                    // Fallback por si la lista elegida está vacía (por algún cambio de stock inesperado)
                     List<int> all2 = new List<int>();
                     all2.AddRange(small);
                     all2.AddRange(medium);
@@ -387,7 +377,6 @@ public class GameManager : MonoBehaviour
                     return ChooseWeightedFrom(all2);
                 }
 
-            // Modo 3: normal, todas las categorías juntas según weight
             case 3:
             default:
                 {
@@ -400,13 +389,20 @@ public class GameManager : MonoBehaviour
         }
     }
 
-
     IEnumerator SpinAndShow(int prizeIndex)
     {
         state = GameState.Spinning;
 
         if (popupResultado != null)
             popupResultado.SetActive(false);
+
+        // AUDIO: iniciar sonido de giro
+        if (audioSource != null && spinClip != null)
+        {
+            audioSource.loop = true;
+            audioSource.clip = spinClip;
+            audioSource.Play();
+        }
 
         if (wheelBuilder.angleCenters == null || wheelBuilder.angleCenters.Count == 0)
         {
@@ -421,11 +417,7 @@ public class GameManager : MonoBehaviour
         }
 
         float angleCenter = wheelBuilder.angleCenters[prizeIndex];
-
-        // Ajuste por si el puntero no está exactamente en 0° arriba
         float adjustedAngle = angleCenter + pointerOffsetAngle;
-
-        // Queremos que el centro del premio quede bajo el puntero (arriba),
         float targetBaseAngle = -adjustedAngle;
 
         int extraSpins = Random.Range(extraFullSpinsMin, extraFullSpinsMax + 1);
@@ -451,7 +443,19 @@ public class GameManager : MonoBehaviour
 
         wheelRoot.localRotation = Quaternion.Euler(0f, 0f, targetBaseAngle);
 
-        //remainingStock[prizeIndex] = Mathf.Max(0, remainingStock[prizeIndex] - 1);
+        // AUDIO: terminar sonido de giro y reproducir sonido de premio
+        if (audioSource != null)
+        {
+            audioSource.loop = false;
+            if (audioSource.isPlaying)
+                audioSource.Stop();
+
+            if (prizeClip != null)
+            {
+                audioSource.PlayOneShot(prizeClip);
+            }
+        }
+
         if (prizeIndex != indexSuerteProxima)
         {
             remainingStock[prizeIndex] = Mathf.Max(0, remainingStock[prizeIndex] - 1);
@@ -488,7 +492,7 @@ public class GameManager : MonoBehaviour
     {
         try
         {
-            string path = DataPaths.ModeFilePath;   // usa el helper DataPaths
+            string path = DataPaths.ModeFilePath;
 
             if (!File.Exists(path))
             {
@@ -548,6 +552,4 @@ public class GameManager : MonoBehaviour
             yield return new WaitForSeconds(modePollInterval);
         }
     }
-
-
 }
