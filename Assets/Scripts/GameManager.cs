@@ -103,6 +103,10 @@ public class GameManager : MonoBehaviour
     [Tooltip("Hora (24h) en la que finaliza la jornada.")]
     public float dayEndHour = 20f;
 
+    [Header("Streak Limits")]
+    [Tooltip("Maximo de premios reales consecutivos (0 = sin limite).")] public int maxRealPrizesInRow = 0;
+    [Tooltip("Maximo de SuerteProxima consecutivas (0 = sin limite).")] public int maxSuerteInRow = 0;
+
     private int[] remainingStock;
     private GameState state = GameState.Idle;
     private int lastResultIndex = -1;
@@ -111,6 +115,8 @@ public class GameManager : MonoBehaviour
     private int spinsToday = 0;
     private int initialRealStock = 0;   // stock real planificado para el día (sin SUERTEPROXIMA)
     private int dailyRealPrizeGoal = 0;
+    private int consecutiveRealPrizes = 0;
+    private int consecutiveSuerteResults = 0;
 
     void Start()
     {
@@ -307,6 +313,32 @@ public class GameManager : MonoBehaviour
 
         // 4) A partir de aquí sí habrá un giro
         spinsToday++;
+
+        bool hasRealStock = totalRealStock > 0;
+        bool hasSuerteAvailable = (indexSuerteProxima >= 0 && remainingStock[indexSuerteProxima] > 0);
+        bool forceRealByStreak = maxSuerteInRow > 0 && consecutiveSuerteResults >= maxSuerteInRow && hasRealStock;
+        bool forceSuerteByStreak = maxRealPrizesInRow > 0 && consecutiveRealPrizes >= maxRealPrizesInRow && hasSuerteAvailable;
+
+        if (forceRealByStreak)
+        {
+            int forcedIndex = ChoosePrizeIndex();
+            if (forcedIndex >= 0)
+            {
+                StartCoroutine(SpinAndShow(forcedIndex));
+                return;
+            }
+            else if (hasSuerteAvailable)
+            {
+                StartCoroutine(SpinAndShow(indexSuerteProxima));
+                return;
+            }
+        }
+
+        if (forceSuerteByStreak)
+        {
+            StartCoroutine(SpinAndShow(indexSuerteProxima));
+            return;
+        }
 
         // 4.1) Pacing adaptativo: decidir si este giro da premio real o SUERTEPROXIMA
         if (useAdaptivePacing)
@@ -594,8 +626,23 @@ public class GameManager : MonoBehaviour
         InventoryService.SaveState(prizes, remainingStock);
 
         ShowPopup(prizes[prizeIndex].name);
+        UpdateStreakCounters(prizeIndex);
 
         state = GameState.ShowingResult;
+    }
+
+    void UpdateStreakCounters(int prizeIndex)
+    {
+        if (indexSuerteProxima >= 0 && prizeIndex == indexSuerteProxima)
+        {
+            consecutiveSuerteResults++;
+            consecutiveRealPrizes = 0;
+        }
+        else
+        {
+            consecutiveRealPrizes++;
+            consecutiveSuerteResults = 0;
+        }
     }
 
     void ShowPopup(string premioTexto)

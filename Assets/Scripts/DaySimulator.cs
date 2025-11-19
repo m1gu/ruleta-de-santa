@@ -19,6 +19,10 @@ public class DaySimulator : MonoBehaviour
     [Range(0f, 1f)] public float minRealPrizeProbability = 0.10f;
     [Range(0f, 1f)] public float maxRealPrizeProbability = 0.90f;
 
+    [Header("Streak Limits")]
+    [Tooltip("Maximo de premios reales consecutivos (0 = sin limite).")] public int maxRealPrizesInRow = 0;
+    [Tooltip("Maximo de SuerteProxima consecutivas (0 = sin limite).")] public int maxSuerteInRow = 0;
+
     [Header("Export")]
     public string outputFilename = "simulacion_resultados.csv";
     public string timelineFilename = "simulacion_timeline.csv";
@@ -86,6 +90,8 @@ public class DaySimulator : MonoBehaviour
         selector.totalPlannedSpins = totalRuns;
         selector.minRealProb = minRealPrizeProbability;
         selector.maxRealProb = maxRealPrizeProbability;
+        selector.maxRealStreak = maxRealPrizesInRow;
+        selector.maxSuerteStreak = maxSuerteInRow;
 
         // 5) Calcular cuantos giros por modo segun porcentajes
         int runsM1 = Mathf.RoundToInt(totalRuns * pctMode1);

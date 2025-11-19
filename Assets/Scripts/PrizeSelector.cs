@@ -12,10 +12,14 @@ public class PrizeSelector
     private int spinsDone = 0;
     private bool hasManualDayProgress = false;
     private float manualDayProgress = 0f;
+    private int consecutiveRealResults = 0;
+    private int consecutiveSuerteResults = 0;
 
     // Parámetros de pacing
     public float minRealProb = 0.10f;
     public float maxRealProb = 0.90f;
+    public int maxRealStreak = 0;
+    public int maxSuerteStreak = 0;
     public AnimationCurve realPrizeDistributionCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
     [Range(0f, 1f)]
     public float distributionAdjustmentStrength = 0.5f;
@@ -66,21 +70,45 @@ public class PrizeSelector
             totalRealStock += remaining[i];
         }
 
-        // 2) Si NO hay premios reales pero sí SUERTEPROXIMA - solo suerte (infinito)
+        bool hasSuerteAvailable = indexSuerte >= 0;
+
+        // 2) Si NO hay premios reales pero si SUERTEPROXIMA - solo suerte (infinito)
         if (totalRealStock <= 0)
         {
-            if (indexSuerte >= 0)
+            if (hasSuerteAvailable)
+            {
+                UpdateStreak(false);
                 return indexSuerte;
+            }
 
             return -1; // caso extremo
         }
 
-        // 3) Cuántos spins faltan en el día (para el simulador)
+        // 3) Cuantos spins faltan en el dia (para el simulador)
         int remainingSpins = Mathf.Max(1, totalPlannedSpins - spinsDone + 1);
 
-        // Si hay MÁS premios reales que spins restantes,
+        // Si hay MAS premios reales que spins restantes,
         // debemos dar SIEMPRE premio real para no dejar stock sin usar.
         bool forceReal = totalRealStock >= remainingSpins;
+        bool forceRealByStreak = maxSuerteStreak > 0 && consecutiveSuerteResults >= maxSuerteStreak;
+        bool forceSuerteByStreak = maxRealStreak > 0 && consecutiveRealResults >= maxRealStreak && hasSuerteAvailable;
+
+        if (forceRealByStreak)
+        {
+            int forcedIdx = ChoosePrize(mode);
+            if (forcedIdx >= 0 && forcedIdx != indexSuerte)
+            {
+                remaining[forcedIdx] = Mathf.Max(0, remaining[forcedIdx] - 1);
+                UpdateStreak(true);
+                return forcedIdx;
+            }
+        }
+
+        if (forceSuerteByStreak)
+        {
+            UpdateStreak(false);
+            return indexSuerte;
+        }
 
         // 4) Si no estamos en modo "forzar premio real", usar pacing normal
         if (!forceReal)
@@ -88,26 +116,31 @@ public class PrizeSelector
             float pReal = ComputePacing(totalRealStock);
             float r = UnityEngine.Random.value;
 
-            // Si este giro NO dará premio real - SUERTEPROXIMA (sin gastar stock)
-            if (r > pReal && indexSuerte >= 0)
+            // Si este giro NO dara premio real - SUERTEPROXIMA (sin gastar stock)
+            if (r > pReal && hasSuerteAvailable)
             {
+                UpdateStreak(false);
                 return indexSuerte;
             }
         }
 
-        // 5) Elegir premio real según modo (1,2,3)
+        // 5) Elegir premio real segun modo (1,2,3)
         int idx = ChoosePrize(mode);
 
         if (idx >= 0 && idx != indexSuerte)
         {
             // Descontar stock SOLO de premios reales
             remaining[idx] = Mathf.Max(0, remaining[idx] - 1);
+            UpdateStreak(true);
             return idx;
         }
 
         // 6) Fallback: si algo falla al elegir real, devolvemos SUERTEPROXIMA si existe
-        if (indexSuerte >= 0)
+        if (hasSuerteAvailable)
+        {
+            UpdateStreak(false);
             return indexSuerte;
+        }
 
         return -1;
     }
@@ -232,5 +265,19 @@ public class PrizeSelector
         }
 
         return list[list.Count - 1];
+    }
+
+    void UpdateStreak(bool realResult)
+    {
+        if (realResult)
+        {
+            consecutiveRealResults++;
+            consecutiveSuerteResults = 0;
+        }
+        else
+        {
+            consecutiveSuerteResults++;
+            consecutiveRealResults = 0;
+        }
     }
 }
