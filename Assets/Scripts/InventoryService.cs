@@ -1,10 +1,13 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
 public static class InventoryService
 {
+    public static string SimulatedDateOverride = null;
+    
+
     [Serializable]
     public class PrizesFile
     {
@@ -55,7 +58,7 @@ public static class InventoryService
             if (file == null || file.prizes == null || file.prizes.Length == 0)
             {
 #if UNITY_EDITOR
-                Debug.LogWarning("[InventoryService] premios.json vac�o o mal formado.");
+                Debug.LogWarning("[InventoryService] premios.json vacío o mal formado.");
 #endif
                 return;
             }
@@ -89,72 +92,89 @@ public static class InventoryService
         }
     }
 
-    // -------- inventario.csv --------
+        // -------- inventario.csv --------
+    
     public static int[] LoadInventoryForToday(List<GameManager.PrizeConfig> prizes)
     {
-        int[] stock = new int[prizes.Count];
-        for (int i = 0; i < prizes.Count; i++)
-            stock[i] = Mathf.Max(0, prizes[i].initialStock);
+        string today = !string.IsNullOrEmpty(SimulatedDateOverride)
+            ? SimulatedDateOverride
+            : System.DateTime.Today.ToString("yyyy-MM-dd");
 
+        return LoadInventoryForDate(prizes, today);
+    }
+
+    public static int[] LoadInventoryForDate(List<GameManager.PrizeConfig> prizes, string date)
+    {
         string path = DataPaths.InventoryFilePath;
+        int[] result = new int[prizes.Count];
+
         if (!File.Exists(path))
         {
-#if UNITY_EDITOR
-            Debug.LogWarning("[InventoryService] inventario.csv no encontrado. Uso initialStock.");
-#endif
-            return stock;
+            Debug.LogError("[InventoryService] inventario.csv no encontrado en " + path + ". Todos los stocks serán 0.");
+            return result;
         }
 
         try
         {
-            string today = DateTime.Today.ToString("yyyy-MM-dd");
             string[] lines = File.ReadAllLines(path);
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            bool foundDate = false;
 
-            var todayQuantities = new Dictionary<string, int>();
-
-            for (int i = 0; i < lines.Length; i++)
+            for (int i = 1; i < lines.Length; i++)
             {
-                if (string.IsNullOrWhiteSpace(lines[i])) continue;
-                if (i == 0 && lines[i].StartsWith("date")) continue;
+                string line = lines[i];
+                if (string.IsNullOrWhiteSpace(line)) continue;
 
-                var parts = lines[i].Split(',');
+                string[] parts = line.Split(',');
                 if (parts.Length < 3) continue;
 
-                string dateStr = parts[0].Trim();
-                string prizeId = parts[1].Trim();
-                string qtyStr = parts[2].Trim();
-
-                if (!string.Equals(dateStr, today, StringComparison.OrdinalIgnoreCase))
+                string lineDate = parts[0].Trim();
+                if (!lineDate.Equals(date, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (!int.TryParse(qtyStr, out int qty)) continue;
-                if (qty < 0) qty = 0;
+                foundDate = true;
 
-                todayQuantities[prizeId] = qty;
+                string lineId = parts[1].Trim();
+                string qtyStr = parts[2].Trim();
+
+                if (!int.TryParse(qtyStr, out int qty))
+                {
+                    Debug.LogWarning($"[InventoryService] No se pudo parsear la cantidad '{qtyStr}' para el premio '{lineId}' en la fecha {date}. Se asumirá 0.");
+                    qty = 0;
+                }
+
+                map[lineId] = qty;
             }
 
             for (int i = 0; i < prizes.Count; i++)
             {
-                if (!string.IsNullOrEmpty(prizes[i].id) &&
-                    todayQuantities.TryGetValue(prizes[i].id, out int qtyForToday))
-                {
-                    stock[i] = qtyForToday;
-                }
+                string id = prizes[i].id;
+                result[i] = map.TryGetValue(id, out int qty) ? qty : 0;
             }
 
+            if (!foundDate)
+            {
+                Debug.LogError("[InventoryService] No existe inventario registrado en inventario.csv para la fecha " + date + ". Todos los stocks quedarán en 0.");
+            }
 #if UNITY_EDITOR
-            Debug.Log("[InventoryService] inventario.csv aplicado para " + today);
+            else
+            {
+                int total = 0;
+                foreach (int v in result) total += v;
+                Debug.Log($"[InventoryService] Inventario para {date}: total={total}");
+            }
 #endif
+
+            return result;
         }
         catch (Exception ex)
         {
             Debug.LogError("[InventoryService] Error leyendo inventario.csv: " + ex.Message);
+            return result;
         }
-
-        return stock;
     }
 
-    // -------- state.json --------
+// -------- state.json --------
     public static int[] ApplySavedState(List<GameManager.PrizeConfig> prizes, int[] baseStock)
     {
         string path = DataPaths.StateFilePath;
@@ -173,7 +193,7 @@ public static class InventoryService
             if (state == null || state.prizes == null || state.prizes.Length == 0)
             {
 #if UNITY_EDITOR
-                Debug.LogWarning("[InventoryService] state.json vac�o. Uso stock base.");
+                Debug.LogWarning("[InventoryService] state.json vacío. Uso stock base.");
 #endif
                 return baseStock;
             }
@@ -182,7 +202,7 @@ public static class InventoryService
             if (!string.Equals(state.date, today, StringComparison.OrdinalIgnoreCase))
             {
 #if UNITY_EDITOR
-                Debug.Log("[InventoryService] state.json es de otro d�a (" + state.date + "), se ignora.");
+                Debug.Log("[InventoryService] state.json es de otro día (" + state.date + "), se ignora.");
 #endif
                 return baseStock;
             }

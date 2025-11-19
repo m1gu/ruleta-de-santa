@@ -3,43 +3,43 @@
     {
       "id": "TAZAS",
       "name": "TAZAS PERSONALIZADAS",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Small",
+      "weight": 10,
       "initialStock": 1000
     },
     {
       "id": "BOMBILLOS",
       "name": "BOMBILLOS PERSONALIZADOS",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Small",
+      "weight": 10,
       "initialStock": 2000
     },
     {
       "id": "SUPEREXITO-20",
       "name": "OC SUPER ÉXITO $20",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 170
     },
     {
       "id": "SUPEREXITO-25",
       "name": "OC SUPER ÉXITO $25",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 2
     },
     {
       "id": "DMUJERES-20",
       "name": "OC DMUJERES $20",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 30
     },
     {
       "id": "POLIPAPEL-10",
       "name": "OC POLIPAPEL $10",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 26
     },
     {
@@ -52,8 +52,8 @@
     {
       "id": "TRIODONAS",
       "name": "TRIO DE DONAS",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 220
     },
     {
@@ -66,50 +66,57 @@
     {
       "id": "PARRILLAASADORA",
       "name": "PARRILLA ASADORA",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Large",
+      "weight": 1,
       "initialStock": 8
     },
     {
       "id": "AIRFRYER",
       "name": "AIR FRYER",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Large",
+      "weight": 1,
       "initialStock": 8
     },
     {
       "id": "LICUADORA",
       "name": "LICUADORA",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Large",
+      "weight": 1,
       "initialStock": 8
     },
     {
       "id": "SANDUCHERA",
       "name": "SANDUCHERA",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Large",
+      "weight": 1,
       "initialStock": 2
     },
     {
       "id": "OLLAARROCERA",
       "name": "OLLA ARROCERA",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Large",
+      "weight": 1,
       "initialStock": 2
+    },
+    {
+      "id": "CAFETERA",
+      "name": "CAFETERA",
+      "category": "Large",
+      "weight": 1,
+      "initialStock": 1
     },
     {
       "id": "BATIDORAMANO",
       "name": "BATIDORA DE MANO",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Large",
+      "weight": 1,
       "initialStock": 3
     },
     {
       "id": "PARRILLASANDUCHERA",
       "name": "PARRILLA SANDUCHERA",
-      "category": "Medium",
-      "weight": 3,
+      "category": "Large",
+      "weight": 1,
       "initialStock": 1
     },
     {
@@ -157,36 +164,36 @@
     {
       "id": "MIMOSAFRUTOSROJOS",
       "name": "MIMOSA FRUTOS ROJOS",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 24
     },
     {
       "id": "GRANDDUVALBLANCO375CC",
       "name": "GRAND DUVAL BLANCO 375CC",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 144
     },
     {
       "id": "GRANDDUVAL750CC",
       "name": "GRAND DUVAL 750CC",
-      "category": "Small",
-      "weight": 10,
+      "category": "Large",
+      "weight": 1,
       "initialStock": 5
     },
     {
       "id": "MONTSANT",
       "name": "MONTSANT",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 240
     },
     {
       "id": "SIDRAL",
       "name": "SIDRAL",
-      "category": "Small",
-      "weight": 10,
+      "category": "Medium",
+      "weight": 3,
       "initialStock": 173
     },
     {

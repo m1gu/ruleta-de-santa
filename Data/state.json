@@ -1,5 +1,5 @@
 {
-    "date": "2025-11-17",
+    "date": "2025-11-19",
     "prizes": [
         {
             "id": "TAZAS",
@@ -11,11 +11,11 @@
         },
         {
             "id": "SUPEREXITO-20",
-            "remaining": 169
+            "remaining": 170
         },
         {
             "id": "SUPEREXITO-25",
-            "remaining": 1
+            "remaining": 0
         },
         {
             "id": "DMUJERES-20",
@@ -23,7 +23,7 @@
         },
         {
             "id": "POLIPAPEL-10",
-            "remaining": 24
+            "remaining": 26
         },
         {
             "id": "KRISPYKREME",
@@ -31,15 +31,15 @@
         },
         {
             "id": "TRIODONAS",
-            "remaining": 218
+            "remaining": 220
         },
         {
             "id": "ENTRADASCINE",
-            "remaining": 648
+            "remaining": 650
         },
         {
             "id": "PARRILLAASADORA",
-            "remaining": 5
+            "remaining": 8
         },
         {
             "id": "AIRFRYER",
@@ -56,6 +56,10 @@
         {
             "id": "OLLAARROCERA",
             "remaining": 2
+        },
+        {
+            "id": "CAFETERA",
+            "remaining": 0
         },
         {
             "id": "BATIDORAMANO",
@@ -75,11 +79,11 @@
         },
         {
             "id": "TV55",
-            "remaining": 3
+            "remaining": 4
         },
         {
             "id": "PARLANTERECARGABLE",
-            "remaining": 9
+            "remaining": 10
         },
         {
             "id": "CELULARREDNI",
@@ -95,15 +99,15 @@
         },
         {
             "id": "GRANDDUVALBLANCO375CC",
-            "remaining": 144
+            "remaining": 143
         },
         {
             "id": "GRANDDUVAL750CC",
-            "remaining": 4
+            "remaining": 5
         },
         {
             "id": "MONTSANT",
-            "remaining": 239
+            "remaining": 240
         },
         {
             "id": "SIDRAL",

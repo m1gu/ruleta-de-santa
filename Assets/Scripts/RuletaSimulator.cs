@@ -66,7 +66,7 @@ public class RuletaSimulator : MonoBehaviour
             }
 
             // 2) Cargar inventario para la fecha
-            remainingStock = LoadInventoryForDate(prizes, simulationDate);
+            remainingStock = InventoryService.LoadInventoryForDate(prizes, simulationDate);
 
             // 3) Encontrar SUERTEPROXIMA
             indexSuerteProxima = -1;
@@ -127,71 +127,6 @@ public class RuletaSimulator : MonoBehaviour
         if (prizes == null)
             prizes = new List<GameManager.PrizeConfig>();
     }
-
-
-    // =========================================================
-    //  Cargar inventario.csv para una fecha específica
-    // =========================================================
-    int[] LoadInventoryForDate(List<GameManager.PrizeConfig> prizeList, string dateStr)
-    {
-        int[] stock = new int[prizeList.Count];
-        for (int i = 0; i < prizeList.Count; i++)
-            stock[i] = prizeList[i].initialStock;
-
-        string path = DataPaths.InventoryFilePath;
-
-        if (!File.Exists(path))
-        {
-            Debug.LogWarning("[RuletaSimulator] inventario.csv no encontrado. Usando initialStock.");
-            return stock;
-        }
-
-        try
-        {
-            // Leer CSV con FileShare.ReadWrite
-            List<string> linesList = new List<string>();
-            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            using (var sr = new StreamReader(fs))
-            {
-                while (!sr.EndOfStream)
-                    linesList.Add(sr.ReadLine());
-            }
-
-            var quantities = new Dictionary<string, int>();
-
-            foreach (string line in linesList)
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                if (line.StartsWith("date")) continue;
-
-                var parts = line.Split(',');
-                if (parts.Length < 3) continue;
-
-                string dateCsv = parts[0].Trim();
-                string id = parts[1].Trim();
-                string qtyStr = parts[2].Trim();
-
-                if (!dateCsv.Equals(dateStr, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (int.TryParse(qtyStr, out int qty))
-                    quantities[id] = qty;
-            }
-
-            for (int i = 0; i < prizeList.Count; i++)
-            {
-                if (quantities.TryGetValue(prizeList[i].id, out int q))
-                    stock[i] = q;
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("[RuletaSimulator] Error leyendo inventario.csv: " + ex.Message);
-        }
-
-        return stock;
-    }
-
 
     // =========================================================
     //  Simulación de una corrida (igual que GameManager)

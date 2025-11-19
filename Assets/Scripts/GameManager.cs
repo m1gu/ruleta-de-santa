@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 using System.IO;
+using System.Globalization;
 
 public class GameManager : MonoBehaviour
 {
@@ -55,19 +56,25 @@ public class GameManager : MonoBehaviour
     public bool useExternalMode = true;    // ¿leer modo desde Data/modo.txt?
     public float modePollInterval = 10f;   // segundos entre lecturas
     [Tooltip("Modo actual efectivo (se actualiza desde modo.txt si useExternalMode=true)")]
-    public int currentMode = 3;            // 1=Pequeños, 2=Grandes, 3=Normal
+    public int currentMode = 3;            // 1=Small, 2=Small+Medium, 3=Small+Medium+Large
+
+    [Header("Modo Prueba")]
+    [Tooltip("Activa una fecha simulada para leer inventario.csv de un día diferente (solo pruebas).")]
+    public bool useTestMode = false;
+    [Tooltip("Fecha simulada en formato yyyy-MM-dd.")]
+    public string testModeDate = "2025-11-20";
 
     [Header("Modo de Juego")]
     [Range(1, 3)]
     public int mode = 3;
 
-    [Header("Modo 2 - Probabilidades por categoría")]
+    [Header("Modo 2 - Probabilidades por categoría (Small/Medium)")]
     [Range(0f, 1f)]
     public float mode2SmallProbability = 0.8f;   // 80% pequeños
     [Range(0f, 1f)]
-    public float mode2MediumProbability = 0.1f;  // 10% medianos
+    public float mode2MediumProbability = 0.2f;  // 20% medianos
     [Range(0f, 1f)]
-    public float mode2LargeProbability = 0.1f;   // 10% grandes
+    public float mode2LargeProbability = 0.0f;   // NO se usa en modo 2, solo para compatibilidad
 
     [Header("Premios (en el mismo orden que los segmentos)")]
     public List<PrizeConfig> prizes = new List<PrizeConfig>();
@@ -79,10 +86,31 @@ public class GameManager : MonoBehaviour
     public AudioClip prizeClip;   // premio.mp3
     // AUDIO <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
+    [Header("Pacing / Dosificación")]
+    public bool useAdaptivePacing = true;
+    [Tooltip("Giros esperados por día (para repartir premios)")]
+    public int expectedSpinsPerDay = 500;
+    [Range(0f, 1f)]
+    public float minRealPrizeProbability = 0.10f;   // mínimo 10% de giros con premio real
+    [Range(0f, 1f)]
+    public float maxRealPrizeProbability = 0.90f;   // máximo 90% de giros con premio real
+    [Range(0f, 1f)]
+    public float pacingAdjustmentStrength = 0.5f;   // qué tan fuerte corrige según la hora
+    [Tooltip("Curva acumulativa deseada de premios reales entregados en el día (0=inicio, 1=fin).")]
+    public AnimationCurve realPrizeDistributionCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+    [Tooltip("Hora (24h) en la que inicia la jornada.")]
+    public float dayStartHour = 11f;
+    [Tooltip("Hora (24h) en la que finaliza la jornada.")]
+    public float dayEndHour = 20f;
+
     private int[] remainingStock;
     private GameState state = GameState.Idle;
     private int lastResultIndex = -1;
     private int indexSuerteProxima = -1;
+
+    private int spinsToday = 0;
+    private int initialRealStock = 0;   // stock real planificado para el día (sin SUERTEPROXIMA)
+    private int dailyRealPrizeGoal = 0;
 
     void Start()
     {
@@ -117,25 +145,28 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // 2) Stock base desde inventario.csv (si no existe, usa initialStock)
-        int[] baseStock = InventoryService.LoadInventoryForToday(prizes);
-
-        // 3) Aplicar estado guardado (state.json), si existe y es del día
-        remainingStock = InventoryService.ApplySavedState(prizes, baseStock);
-
-        // 4) Sincronizar ruleta con la lista de premios
-        SyncWheelWithPrizes();
-
-        // 5) Modo
-        currentMode = Mathf.Clamp(mode, 1, 3);
-
-        if (useExternalMode)
+        if (useTestMode)
         {
-            LoadModeFromFile();
-            StartCoroutine(ModeWatcherCoroutine());
+            if (System.DateTime.TryParseExact(testModeDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+            {
+                InventoryService.SimulatedDateOverride = testModeDate;
+                Debug.Log("[GameManager] Modo de prueba activo. Simulando fecha de inventario: " + testModeDate);
+            }
+            else
+            {
+                Debug.LogError("[GameManager] testModeDate inválida (" + testModeDate + "). Se usará la fecha real del sistema.");
+                InventoryService.SimulatedDateOverride = null;
+            }
+        }
+        else
+        {
+            InventoryService.SimulatedDateOverride = null;
         }
 
-        // Buscar el índice del premio "suerte para la próxima"
+        // 2) Stock base desde inventario.csv (si no existe o falla, quedará en 0 y se registrará el error)
+        int[] baseStock = InventoryService.LoadInventoryForToday(prizes);
+
+        // 2.1) Buscar el índice del premio "suerte para la próxima"
         indexSuerteProxima = -1;
         for (int i = 0; i < prizes.Count; i++)
         {
@@ -154,6 +185,31 @@ public class GameManager : MonoBehaviour
         else
         {
             Debug.LogWarning("[GameManager] No se encontró premio con id = SUERTEPROXIMA. El modo 'solo suerte' no podrá activarse.");
+        }
+
+        // 2.2) Calcular stock real inicial del día (sin SUERTEPROXIMA)
+        initialRealStock = 0;
+        for (int i = 0; i < baseStock.Length; i++)
+        {
+            if (i == indexSuerteProxima) continue;
+            initialRealStock += Mathf.Max(0, baseStock[i]);
+        }
+        Debug.Log("[GameManager] Stock real inicial del día (sin SUERTEPROXIMA): " + initialRealStock);
+        dailyRealPrizeGoal = initialRealStock;
+
+        // 3) Aplicar estado guardado (state.json), si existe y es del día
+        remainingStock = InventoryService.ApplySavedState(prizes, baseStock);
+
+        // 4) Sincronizar ruleta con la lista de premios
+        SyncWheelWithPrizes();
+
+        // 5) Modo
+        currentMode = Mathf.Clamp(mode, 1, 3);
+
+        if (useExternalMode)
+        {
+            LoadModeFromFile();
+            StartCoroutine(ModeWatcherCoroutine());
         }
 
         state = GameState.Idle;
@@ -233,6 +289,7 @@ public class GameManager : MonoBehaviour
             }
 
             Debug.Log("[GameManager] Sin stock de premios reales. Solo se entregará SUERTEPROXIMA.");
+            spinsToday++;
             StartCoroutine(SpinAndShow(indexSuerteProxima));
             return;
         }
@@ -248,15 +305,90 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // 4) Caso normal: hay premios reales → usar lógica normal de selección
+        // 4) A partir de aquí sí habrá un giro
+        spinsToday++;
+
+        // 4.1) Pacing adaptativo: decidir si este giro da premio real o SUERTEPROXIMA
+        if (useAdaptivePacing)
+        {
+            float pReal = ComputeRealPrizeProbability(totalRealStock);
+            float r = Random.value;
+
+            if (r > pReal)
+            {
+                // Giro sin premio real -> SUERTEPROXIMA, si está disponible
+                if (indexSuerteProxima >= 0 && remainingStock[indexSuerteProxima] > 0)
+                {
+                    Debug.Log($"[GameManager] Giro sin premio real (pReal={pReal:F2}). Se entrega SUERTEPROXIMA.");
+                    StartCoroutine(SpinAndShow(indexSuerteProxima));
+                    return;
+                }
+                else
+                {
+                    Debug.Log("[GameManager] Giro sin premio real, pero SUERTEPROXIMA no disponible. Se intentará premio real.");
+                }
+            }
+        }
+
+        // 5) Caso normal: hay premios reales → usar lógica normal de selección
         int chosenIndex = ChoosePrizeIndex();
         if (chosenIndex < 0)
         {
-            Debug.LogWarning("GameManager: No se pudo elegir premio.");
+            Debug.LogWarning("GameManager: No se pudo elegir premio real. Se intentará SUERTEPROXIMA si existe.");
+
+            if (indexSuerteProxima >= 0 && remainingStock[indexSuerteProxima] > 0)
+            {
+                StartCoroutine(SpinAndShow(indexSuerteProxima));
+            }
             return;
         }
 
         StartCoroutine(SpinAndShow(chosenIndex));
+    }
+
+    // Calcula probabilidad de dar premio real en este giro
+    float ComputeRealPrizeProbability(int totalRealStock)
+    {
+        if (!useAdaptivePacing)
+            return 1f;
+
+        if (dailyRealPrizeGoal <= 0 || expectedSpinsPerDay <= 0)
+            return maxRealPrizeProbability;
+
+        float baseProb = Mathf.Clamp01((float)dailyRealPrizeGoal / Mathf.Max(1f, expectedSpinsPerDay));
+
+        float dayProgress = GetDayProgress01();
+        float expectedRatio = Mathf.Clamp01(realPrizeDistributionCurve != null
+            ? realPrizeDistributionCurve.Evaluate(dayProgress)
+            : dayProgress);
+
+        int deliveredReal = Mathf.Clamp(dailyRealPrizeGoal - totalRealStock, 0, dailyRealPrizeGoal);
+        float expectedDelivered = expectedRatio * dailyRealPrizeGoal;
+        float diff = expectedDelivered - deliveredReal;
+        float normalizedDiff = diff / Mathf.Max(1f, dailyRealPrizeGoal);
+
+        float adjustedProb = baseProb * (1f + pacingAdjustmentStrength * normalizedDiff);
+        return Mathf.Clamp(adjustedProb, minRealPrizeProbability, maxRealPrizeProbability);
+    }
+
+    float GetDayProgress01()
+    {
+        if (dayEndHour <= dayStartHour)
+            return 1f;
+
+        System.DateTime now = System.DateTime.Now;
+        System.DateTime today = System.DateTime.Today;
+        System.DateTime start = today.AddHours(dayStartHour);
+        System.DateTime end = today.AddHours(dayEndHour);
+
+        double totalSeconds = (end - start).TotalSeconds;
+        if (totalSeconds <= 0)
+            return 1f;
+
+        if (now <= start) return 0f;
+        if (now >= end) return 1f;
+
+        return (float)((now - start).TotalSeconds / totalSeconds);
     }
 
     int ChoosePrizeIndex()
@@ -315,31 +447,30 @@ public class GameManager : MonoBehaviour
 
         switch (currentMode)
         {
+            // Modo 1: SOLO premios Small
             case 1:
                 {
                     int idx = ChooseWeightedFrom(small);
                     if (idx >= 0) return idx;
 
-                    List<int> all = new List<int>();
-                    all.AddRange(small);
-                    all.AddRange(medium);
-                    all.AddRange(large);
-                    return ChooseWeightedFrom(all);
+                    // Si no hay Small, devolvemos -1 y dejaremos que OnStartSpinRequested
+                    // haga fallback a SUERTEPROXIMA (o nada).
+                    return -1;
                 }
 
+            // Modo 2: SOLO Small + Medium, con probabilidades configurables
             case 2:
                 {
                     bool hasSmall = small.Count > 0;
                     bool hasMedium = medium.Count > 0;
-                    bool hasLarge = large.Count > 0;
 
                     float pSmall = hasSmall ? Mathf.Max(0f, mode2SmallProbability) : 0f;
                     float pMedium = hasMedium ? Mathf.Max(0f, mode2MediumProbability) : 0f;
-                    float pLarge = hasLarge ? Mathf.Max(0f, mode2LargeProbability) : 0f;
 
-                    float sum = pSmall + pMedium + pLarge;
+                    float sum = pSmall + pMedium;
                     if (sum <= 0f)
                     {
+                        // fallback: cualquier premio con stock (Small/Medium/Large)
                         List<int> all = new List<int>();
                         all.AddRange(small);
                         all.AddRange(medium);
@@ -349,7 +480,6 @@ public class GameManager : MonoBehaviour
 
                     pSmall /= sum;
                     pMedium /= sum;
-                    pLarge /= sum;
 
                     float r = Random.value;
                     List<int> chosenList = null;
@@ -358,18 +488,15 @@ public class GameManager : MonoBehaviour
                     {
                         chosenList = small;
                     }
-                    else if (r < pSmall + pMedium)
-                    {
-                        chosenList = medium;
-                    }
                     else
                     {
-                        chosenList = large;
+                        chosenList = medium;
                     }
 
                     int idxCat = ChooseWeightedFrom(chosenList);
                     if (idxCat >= 0) return idxCat;
 
+                    // Fallback: todos
                     List<int> all2 = new List<int>();
                     all2.AddRange(small);
                     all2.AddRange(medium);
@@ -377,6 +504,7 @@ public class GameManager : MonoBehaviour
                     return ChooseWeightedFrom(all2);
                 }
 
+            // Modo 3: Small + Medium + Large, todos juntos según weight
             case 3:
             default:
                 {
