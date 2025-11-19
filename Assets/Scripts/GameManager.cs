@@ -52,23 +52,17 @@ public class GameManager : MonoBehaviour
     [Header("Alignment")]
     public float pointerOffsetAngle = 0f;   // en grados, ajustable en el inspector
 
-    [Header("Config externa")]
-    public bool useExternalMode = true;    // ¿leer modo desde Data/modo.txt?
-    public float modePollInterval = 10f;   // segundos entre lecturas
-    [Tooltip("Modo actual efectivo (se actualiza desde modo.txt si useExternalMode=true)")]
+            [Header("Modo actual")]
+    [Tooltip("Modo actual efectivo (controlado por teclado: 1, 2, 3)")]
     public int currentMode = 3;            // 1=Small, 2=Small+Medium, 3=Small+Medium+Large
 
     [Header("Modo Prueba")]
-    [Tooltip("Activa una fecha simulada para leer inventario.csv de un día diferente (solo pruebas).")]
+    [Tooltip("Activa una fecha simulada para leer inventario.csv de un dia diferente (solo pruebas).")]
     public bool useTestMode = false;
     [Tooltip("Fecha simulada en formato yyyy-MM-dd.")]
     public string testModeDate = "2025-11-20";
 
-    [Header("Modo de Juego")]
-    [Range(1, 3)]
-    public int mode = 3;
-
-    [Header("Modo 2 - Probabilidades por categoría (Small/Medium)")]
+[Header("Modo 2 - Probabilidades por categoría (Small/Medium)")]
     [Range(0f, 1f)]
     public float mode2SmallProbability = 0.8f;   // 80% pequeños
     [Range(0f, 1f)]
@@ -117,6 +111,7 @@ public class GameManager : MonoBehaviour
     private int dailyRealPrizeGoal = 0;
     private int consecutiveRealPrizes = 0;
     private int consecutiveSuerteResults = 0;
+    private Texture2D modeIndicatorTexture;
 
     void Start()
     {
@@ -209,15 +204,7 @@ public class GameManager : MonoBehaviour
         // 4) Sincronizar ruleta con la lista de premios
         SyncWheelWithPrizes();
 
-        // 5) Modo
-        currentMode = Mathf.Clamp(mode, 1, 3);
-
-        if (useExternalMode)
-        {
-            LoadModeFromFile();
-            StartCoroutine(ModeWatcherCoroutine());
-        }
-
+        SetCurrentMode(Mathf.Clamp(currentMode, 1, 3));
         state = GameState.Idle;
     }
 
@@ -248,6 +235,8 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
+        HandleModeHotkeys();
+
         if (!Pressed()) return;
 
         switch (state)
@@ -262,6 +251,34 @@ public class GameManager : MonoBehaviour
                 state = GameState.Idle;
                 break;
         }
+    }
+
+    void HandleModeHotkeys()
+    {
+        if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
+        {
+            SetCurrentMode(1);
+        }
+        else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
+        {
+            SetCurrentMode(2);
+        }
+        else if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3))
+        {
+            SetCurrentMode(3);
+        }
+    }
+
+    void SetCurrentMode(int newMode)
+    {
+        newMode = Mathf.Clamp(newMode, 1, 3);
+        if (newMode == currentMode)
+            return;
+
+        currentMode = newMode;
+#if UNITY_EDITOR
+        Debug.Log("[GameManager] Modo cambiado manualmente a: " + currentMode);
+#endif
     }
 
     bool Pressed()
@@ -663,68 +680,33 @@ public class GameManager : MonoBehaviour
             popupResultado.SetActive(false);
     }
 
-    void LoadModeFromFile()
+    void OnGUI()
     {
-        try
+        if (modeIndicatorTexture == null)
         {
-            string path = DataPaths.ModeFilePath;
-
-            if (!File.Exists(path))
-            {
-#if UNITY_EDITOR
-                Debug.LogWarning("[GameManager] modo.txt no encontrado en " + path + ". Se mantiene currentMode=" + currentMode);
-#endif
-                return;
-            }
-
-            string txt = File.ReadAllText(path).Trim();
-
-            if (int.TryParse(txt, out int newMode))
-            {
-                if (newMode >= 1 && newMode <= 3)
-                {
-                    if (newMode != currentMode)
-                    {
-                        int previous = currentMode;
-                        currentMode = newMode;
-
-#if UNITY_EDITOR
-                        Debug.Log($"[GameManager] 🔄 Cambio de modo detectado: {previous} → {currentMode}");
-#endif
-                    }
-                    else
-                    {
-#if UNITY_EDITOR
-                        Debug.Log($"[GameManager] Modo leído ({newMode}) pero no cambió.");
-#endif
-                    }
-                }
-                else
-                {
-#if UNITY_EDITOR
-                    Debug.LogWarning("[GameManager] Valor fuera de rango en modo.txt: " + txt + ". Debe ser 1, 2 o 3.");
-#endif
-                }
-            }
-            else
-            {
-#if UNITY_EDITOR
-                Debug.LogWarning("[GameManager] No se pudo parsear modo.txt: " + txt);
-#endif
-            }
+            modeIndicatorTexture = new Texture2D(1, 1);
+            modeIndicatorTexture.SetPixel(0, 0, Color.white);
+            modeIndicatorTexture.Apply();
         }
-        catch (System.Exception ex)
-        {
-            Debug.LogError("[GameManager] Error leyendo modo.txt: " + ex.Message);
-        }
+
+        Rect rect = GetIndicatorRect();
+        GUI.DrawTexture(rect, modeIndicatorTexture);
     }
 
-    IEnumerator ModeWatcherCoroutine()
+    Rect GetIndicatorRect()
     {
-        while (useExternalMode)
+        float size = 10f;
+        float padding = 5f;
+
+        switch (currentMode)
         {
-            LoadModeFromFile();
-            yield return new WaitForSeconds(modePollInterval);
+            case 1:
+                return new Rect(padding, padding, size, size);
+            case 2:
+                return new Rect(Screen.width - size - padding, padding, size, size);
+            case 3:
+            default:
+                return new Rect(padding, Screen.height - size - padding, size, size);
         }
     }
 }
