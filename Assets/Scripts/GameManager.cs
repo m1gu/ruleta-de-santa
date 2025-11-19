@@ -62,13 +62,13 @@ public class GameManager : MonoBehaviour
     [Tooltip("Fecha simulada en formato yyyy-MM-dd.")]
     public string testModeDate = "2025-11-20";
 
-[Header("Modo 2 - Probabilidades por categoría (Small/Medium)")]
+[Header("Probabilidades por categor�a (Modos 2 y 3)")]
     [Range(0f, 1f)]
-    public float mode2SmallProbability = 0.8f;   // 80% pequeños
+    public float mode2SmallProbability = 0.8f;
     [Range(0f, 1f)]
-    public float mode2MediumProbability = 0.2f;  // 20% medianos
+    public float mode2MediumProbability = 0.2f;
     [Range(0f, 1f)]
-    public float mode2LargeProbability = 0.0f;   // NO se usa en modo 2, solo para compatibilidad
+    public float mode2LargeProbability = 0.0f;
 
     [Header("Premios (en el mismo orden que los segmentos)")]
     public List<PrizeConfig> prizes = new List<PrizeConfig>();
@@ -198,8 +198,15 @@ public class GameManager : MonoBehaviour
         Debug.Log("[GameManager] Stock real inicial del día (sin SUERTEPROXIMA): " + initialRealStock);
         dailyRealPrizeGoal = initialRealStock;
 
-        // 3) Aplicar estado guardado (state.json), si existe y es del día
-        remainingStock = InventoryService.ApplySavedState(prizes, baseStock);
+        // 3) Aplicar estado guardado (state.json) solo en corridas reales
+        if (useTestMode)
+        {
+            remainingStock = baseStock;
+        }
+        else
+        {
+            remainingStock = InventoryService.ApplySavedState(prizes, baseStock);
+        }
 
         // 4) Sincronizar ruleta con la lista de premios
         SyncWheelWithPrizes();
@@ -448,6 +455,7 @@ public class GameManager : MonoBehaviour
 
         for (int i = 0; i < prizes.Count; i++)
         {
+            if (i == indexSuerteProxima) continue;
             if (remainingStock[i] <= 0) continue;
 
             switch (prizes[i].category)
@@ -467,33 +475,6 @@ public class GameManager : MonoBehaviour
         if (small.Count == 0 && medium.Count == 0 && large.Count == 0)
             return -1;
 
-        int ChooseWeightedFrom(List<int> indices)
-        {
-            if (indices == null || indices.Count == 0) return -1;
-
-            float totalWeight = 0f;
-            foreach (int idx in indices)
-                totalWeight += Mathf.Max(0f, prizes[idx].weight);
-
-            if (totalWeight <= 0f)
-            {
-                return indices[Random.Range(0, indices.Count)];
-            }
-
-            float r = Random.Range(0f, totalWeight);
-            float accum = 0f;
-
-            foreach (int idx in indices)
-            {
-                float w = Mathf.Max(0f, prizes[idx].weight);
-                accum += w;
-                if (r <= accum)
-                    return idx;
-            }
-
-            return indices[indices.Count - 1];
-        }
-
         switch (currentMode)
         {
             // Modo 1: SOLO premios Small
@@ -507,63 +488,92 @@ public class GameManager : MonoBehaviour
                     return -1;
                 }
 
-            // Modo 2: SOLO Small + Medium, con probabilidades configurables
+            // Modo 2: Small + Medium con probabilidades configurables
             case 2:
                 {
-                    bool hasSmall = small.Count > 0;
-                    bool hasMedium = medium.Count > 0;
-
-                    float pSmall = hasSmall ? Mathf.Max(0f, mode2SmallProbability) : 0f;
-                    float pMedium = hasMedium ? Mathf.Max(0f, mode2MediumProbability) : 0f;
-
-                    float sum = pSmall + pMedium;
-                    if (sum <= 0f)
-                    {
-                        // fallback: cualquier premio con stock (Small/Medium/Large)
-                        List<int> all = new List<int>();
-                        all.AddRange(small);
-                        all.AddRange(medium);
-                        all.AddRange(large);
-                        return ChooseWeightedFrom(all);
-                    }
-
-                    pSmall /= sum;
-                    pMedium /= sum;
-
-                    float r = Random.value;
-                    List<int> chosenList = null;
-
-                    if (r < pSmall)
-                    {
-                        chosenList = small;
-                    }
-                    else
-                    {
-                        chosenList = medium;
-                    }
-
-                    int idxCat = ChooseWeightedFrom(chosenList);
-                    if (idxCat >= 0) return idxCat;
-
-                    // Fallback: todos
-                    List<int> all2 = new List<int>();
-                    all2.AddRange(small);
-                    all2.AddRange(medium);
-                    all2.AddRange(large);
-                    return ChooseWeightedFrom(all2);
+                    return ChoosePrizeByCategory(small, medium, large, includeLarge: false);
                 }
 
-            // Modo 3: Small + Medium + Large, todos juntos según weight
+            // Modo 3: Small + Medium + Large con probabilidades por categor�a
             case 3:
             default:
                 {
-                    List<int> all = new List<int>();
-                    all.AddRange(small);
-                    all.AddRange(medium);
-                    all.AddRange(large);
-                    return ChooseWeightedFrom(all);
+                    return ChoosePrizeByCategory(small, medium, large, includeLarge: true);
                 }
         }
+    }
+
+    int ChoosePrizeByCategory(List<int> smallList, List<int> mediumList, List<int> largeList, bool includeLarge)
+    {
+        bool hasSmall = smallList.Count > 0;
+        bool hasMedium = mediumList.Count > 0;
+        bool hasLarge = includeLarge && largeList.Count > 0;
+
+        float pSmall = hasSmall ? Mathf.Max(0f, mode2SmallProbability) : 0f;
+        float pMedium = hasMedium ? Mathf.Max(0f, mode2MediumProbability) : 0f;
+        float pLarge = hasLarge ? Mathf.Max(0f, mode2LargeProbability) : 0f;
+
+        float sum = pSmall + pMedium + pLarge;
+        if (sum <= 0f)
+        {
+            List<int> fallback = new List<int>();
+            if (hasSmall) fallback.AddRange(smallList);
+            if (hasMedium) fallback.AddRange(mediumList);
+            if (hasLarge) fallback.AddRange(largeList);
+            return ChooseWeightedFrom(fallback);
+        }
+
+        float r = Random.value * sum;
+        List<int> chosenList = null;
+
+        if (r < pSmall && hasSmall)
+            chosenList = smallList;
+        else if (r < pSmall + pMedium && hasMedium)
+            chosenList = mediumList;
+        else if (hasLarge)
+            chosenList = largeList;
+        else if (hasSmall)
+            chosenList = smallList;
+        else if (hasMedium)
+            chosenList = mediumList;
+        else
+            chosenList = largeList;
+
+        int idx = ChooseWeightedFrom(chosenList);
+        if (idx >= 0) return idx;
+
+        List<int> fallbackAll = new List<int>();
+        if (hasSmall) fallbackAll.AddRange(smallList);
+        if (hasMedium) fallbackAll.AddRange(mediumList);
+        if (hasLarge) fallbackAll.AddRange(largeList);
+        return ChooseWeightedFrom(fallbackAll);
+    }
+
+    int ChooseWeightedFrom(List<int> indices)
+    {
+        if (indices == null || indices.Count == 0) return -1;
+
+        float totalWeight = 0f;
+        foreach (int idx in indices)
+            totalWeight += Mathf.Max(0f, prizes[idx].weight);
+
+        if (totalWeight <= 0f)
+        {
+            return indices[Random.Range(0, indices.Count)];
+        }
+
+        float r = Random.Range(0f, totalWeight);
+        float accum = 0f;
+
+        foreach (int idx in indices)
+        {
+            float w = Mathf.Max(0f, prizes[idx].weight);
+            accum += w;
+            if (r <= accum)
+                return idx;
+        }
+
+        return indices[indices.Count - 1];
     }
 
     IEnumerator SpinAndShow(int prizeIndex)
@@ -640,7 +650,10 @@ public class GameManager : MonoBehaviour
 
         lastResultIndex = prizeIndex;
 
-        InventoryService.SaveState(prizes, remainingStock);
+        if (!useTestMode)
+        {
+            InventoryService.SaveState(prizes, remainingStock);
+        }
 
         ShowPopup(prizes[prizeIndex].name);
         UpdateStreakCounters(prizeIndex);

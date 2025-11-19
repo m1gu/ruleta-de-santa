@@ -197,6 +197,7 @@ public class PrizeSelector
 
         for (int i = 0; i < prizes.Count; i++)
         {
+            if (i == indexSuerte) continue;
             if (remaining[i] <= 0) continue;
 
             switch (prizes[i].category)
