@@ -23,6 +23,16 @@ public class DaySimulator : MonoBehaviour
     [Tooltip("Maximo de premios reales consecutivos (0 = sin limite).")] public int maxRealPrizesInRow = 0;
     [Tooltip("Maximo de SuerteProxima consecutivas (0 = sin limite).")] public int maxSuerteInRow = 0;
 
+    [Header("Auto Regulacion")]
+    public bool enableStockGuard = true;
+    [Range(0f, 1f)] public float stockGuardSlack = 0.15f;
+    public bool useHourlyQuota = false;
+    [Range(0f, 0.5f)] public float hourlyQuotaTolerance = 0.02f;
+    public List<float> hourlyQuotaWeights = new List<float>
+    {
+        1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f
+    };
+
     [Header("Export")]
     public string outputFilename = "simulacion_resultados.csv";
     public string timelineFilename = "simulacion_timeline.csv";
@@ -92,6 +102,13 @@ public class DaySimulator : MonoBehaviour
         selector.maxRealProb = maxRealPrizeProbability;
         selector.maxRealStreak = maxRealPrizesInRow;
         selector.maxSuerteStreak = maxSuerteInRow;
+        selector.enableStockGuard = enableStockGuard;
+        selector.stockGuardSlack = stockGuardSlack;
+        selector.useHourlyQuota = useHourlyQuota;
+        selector.hourlyQuotaTolerance = hourlyQuotaTolerance;
+        selector.hourlyQuotaWeights = hourlyQuotaWeights != null
+            ? new List<float>(hourlyQuotaWeights)
+            : new List<float>();
 
         DailyReportService.Initialize(simulatedDate, prizes, false);
 

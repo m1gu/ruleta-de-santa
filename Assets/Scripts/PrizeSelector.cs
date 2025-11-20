@@ -24,6 +24,11 @@ public class PrizeSelector
     [Range(0f, 1f)]
     public float distributionAdjustmentStrength = 0.5f;
     public int dailyRealPrizeGoal = 0;
+    public bool enableStockGuard = true;
+    [Range(0f, 1f)] public float stockGuardSlack = 0.15f;
+    public bool useHourlyQuota = false;
+    [Range(0f, 0.5f)] public float hourlyQuotaTolerance = 0.02f;
+    public List<float> hourlyQuotaWeights = new List<float>();
 
     // Total de corridas planificadas para el día (lo fija el simulador)
     public int expectedSpinsPerDay = 500;
@@ -165,6 +170,8 @@ public class PrizeSelector
 
         float baseProb = Mathf.Clamp01((float)dailyRealPrizeGoal / Mathf.Max(1f, expectedSpinsPerDay));
         float p = baseProb * (1f + distributionAdjustmentStrength * normalizedDiff);
+        p = ApplyHourlyQuota(p, deliveredReal, dayProgress);
+        p = ApplyStockGuard(p, remainingReal);
 
         return Mathf.Clamp(p, minRealProb, maxRealProb);
     }
@@ -182,6 +189,66 @@ public class PrizeSelector
 
         float progress = (float)spinsDone / Mathf.Max(1, expectedSpinsPerDay);
         return Mathf.Clamp01(progress);
+    }
+
+    float ApplyStockGuard(float probability, int remainingReal)
+    {
+        if (!enableStockGuard)
+            return probability;
+
+        int spinsRemaining = Mathf.Max(0, expectedSpinsPerDay - spinsDone);
+        if (spinsRemaining <= 0)
+            return probability;
+
+        float ratio = (float)remainingReal / Mathf.Max(1, spinsRemaining);
+        if (ratio >= 1f + stockGuardSlack)
+            return probability;
+
+        float guard = Mathf.Clamp01(ratio + stockGuardSlack);
+        return probability * guard;
+    }
+
+    float ApplyHourlyQuota(float probability, int deliveredReal, float dayProgress)
+    {
+        if (!useHourlyQuota || hourlyQuotaWeights == null || hourlyQuotaWeights.Count == 0 || dailyRealPrizeGoal <= 0)
+            return probability;
+
+        float totalShare = 0f;
+        foreach (float value in hourlyQuotaWeights)
+            totalShare += Mathf.Max(0f, value);
+
+        if (totalShare <= Mathf.Epsilon)
+            return probability;
+
+        int blocks = hourlyQuotaWeights.Count;
+        float blockSize = 1f / Mathf.Max(1, blocks);
+        dayProgress = Mathf.Clamp01(dayProgress);
+        int blockIndex = Mathf.Clamp(Mathf.FloorToInt(dayProgress / blockSize), 0, blocks - 1);
+        float blockStart = blockIndex * blockSize;
+        float progressInside = blockSize > 0f ? Mathf.Clamp01((dayProgress - blockStart) / blockSize) : 0f;
+
+        float cumulative = 0f;
+        for (int i = 0; i < blockIndex; i++)
+            cumulative += Mathf.Max(0f, hourlyQuotaWeights[i]);
+        cumulative += Mathf.Max(0f, hourlyQuotaWeights[blockIndex]) * progressInside;
+
+        float targetRatio = cumulative / totalShare;
+        float actualRatio = (float)deliveredReal / Mathf.Max(1, dailyRealPrizeGoal);
+        float diff = actualRatio - targetRatio;
+
+        if (Mathf.Abs(diff) <= hourlyQuotaTolerance)
+            return probability;
+
+        if (diff > 0f)
+        {
+            float severity = Mathf.Clamp01(diff - hourlyQuotaTolerance);
+            return probability * Mathf.Clamp01(1f - severity);
+        }
+        else
+        {
+            float severity = Mathf.Clamp01(-diff - hourlyQuotaTolerance);
+            return probability * (1f + severity);
+        }
     }
 
     /// Elige índice de premio real (NO incluye SUERTEPROXIMA) según el modo.

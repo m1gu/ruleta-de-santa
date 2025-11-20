@@ -101,6 +101,16 @@ public class GameManager : MonoBehaviour
     [Tooltip("Maximo de premios reales consecutivos (0 = sin limite).")] public int maxRealPrizesInRow = 0;
     [Tooltip("Maximo de SuerteProxima consecutivas (0 = sin limite).")] public int maxSuerteInRow = 0;
 
+    [Header("Auto Regulacion")]
+    public bool useStockGuard = true;
+    [Range(0f, 1f)] public float stockGuardSlack = 0.15f;
+    public bool useHourlyQuota = false;
+    [Range(0f, 0.5f)] public float hourlyQuotaTolerance = 0.02f;
+    public List<float> hourlyQuotaWeights = new List<float>
+    {
+        1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f
+    };
+
     private int[] remainingStock;
     private GameState state = GameState.Idle;
     private int lastResultIndex = -1;
@@ -410,26 +420,30 @@ public class GameManager : MonoBehaviour
     // Calcula probabilidad de dar premio real en este giro
     float ComputeRealPrizeProbability(int totalRealStock)
     {
-        if (!useAdaptivePacing)
-            return 1f;
-
-        if (dailyRealPrizeGoal <= 0 || expectedSpinsPerDay <= 0)
-            return maxRealPrizeProbability;
-
-        float baseProb = Mathf.Clamp01((float)dailyRealPrizeGoal / Mathf.Max(1f, expectedSpinsPerDay));
-
+        float probability = Mathf.Clamp(maxRealPrizeProbability, minRealPrizeProbability, maxRealPrizeProbability);
+        int deliveredReal = Mathf.Clamp(dailyRealPrizeGoal - totalRealStock, 0, Mathf.Max(1, dailyRealPrizeGoal));
         float dayProgress = GetDayProgress01();
-        float expectedRatio = Mathf.Clamp01(realPrizeDistributionCurve != null
-            ? realPrizeDistributionCurve.Evaluate(dayProgress)
-            : dayProgress);
 
-        int deliveredReal = Mathf.Clamp(dailyRealPrizeGoal - totalRealStock, 0, dailyRealPrizeGoal);
-        float expectedDelivered = expectedRatio * dailyRealPrizeGoal;
-        float diff = expectedDelivered - deliveredReal;
-        float normalizedDiff = diff / Mathf.Max(1f, dailyRealPrizeGoal);
+        if (useAdaptivePacing && dailyRealPrizeGoal > 0 && expectedSpinsPerDay > 0)
+        {
+            float baseProb = Mathf.Clamp01((float)dailyRealPrizeGoal / Mathf.Max(1f, expectedSpinsPerDay));
 
-        float adjustedProb = baseProb * (1f + pacingAdjustmentStrength * normalizedDiff);
-        return Mathf.Clamp(adjustedProb, minRealPrizeProbability, maxRealPrizeProbability);
+            float expectedRatio = Mathf.Clamp01(realPrizeDistributionCurve != null
+                ? realPrizeDistributionCurve.Evaluate(dayProgress)
+                : dayProgress);
+
+            float expectedDelivered = expectedRatio * dailyRealPrizeGoal;
+            float diff = expectedDelivered - deliveredReal;
+            float normalizedDiff = diff / Mathf.Max(1f, dailyRealPrizeGoal);
+
+            probability = baseProb * (1f + pacingAdjustmentStrength * normalizedDiff);
+            probability = Mathf.Clamp(probability, minRealPrizeProbability, maxRealPrizeProbability);
+        }
+
+        probability = ApplyHourlyQuota(probability, deliveredReal, dayProgress);
+        probability = ApplyStockGuard(probability, totalRealStock);
+
+        return Mathf.Clamp(probability, minRealPrizeProbability, maxRealPrizeProbability);
     }
 
     float GetDayProgress01()
@@ -450,6 +464,67 @@ public class GameManager : MonoBehaviour
         if (now >= end) return 1f;
 
         return (float)((now - start).TotalSeconds / totalSeconds);
+    }
+
+    float ApplyStockGuard(float probability, int totalRealStock)
+    {
+        if (!useStockGuard)
+            return probability;
+
+        int spinsRemaining = Mathf.Max(0, expectedSpinsPerDay - spinsToday);
+        if (spinsRemaining <= 0)
+            return probability;
+
+        float ratio = (float)totalRealStock / Mathf.Max(1, spinsRemaining);
+        if (ratio >= 1f + stockGuardSlack)
+            return probability;
+
+        float guard = Mathf.Clamp01(ratio + stockGuardSlack);
+        return probability * guard;
+    }
+
+    float ApplyHourlyQuota(float probability, int deliveredReal, float dayProgress)
+    {
+        if (!useHourlyQuota || hourlyQuotaWeights == null || hourlyQuotaWeights.Count == 0 || dailyRealPrizeGoal <= 0)
+            return probability;
+
+        float totalShare = 0f;
+        foreach (float value in hourlyQuotaWeights)
+            totalShare += Mathf.Max(0f, value);
+
+        if (totalShare <= Mathf.Epsilon)
+            return probability;
+
+        int blocks = hourlyQuotaWeights.Count;
+        float blockSize = 1f / Mathf.Max(1, blocks);
+        dayProgress = Mathf.Clamp01(dayProgress);
+
+        int blockIndex = Mathf.Clamp(Mathf.FloorToInt(dayProgress / blockSize), 0, blocks - 1);
+        float blockStart = blockIndex * blockSize;
+        float progressInside = blockSize > 0f ? Mathf.Clamp01((dayProgress - blockStart) / blockSize) : 0f;
+
+        float cumulative = 0f;
+        for (int i = 0; i < blockIndex; i++)
+            cumulative += Mathf.Max(0f, hourlyQuotaWeights[i]);
+        cumulative += Mathf.Max(0f, hourlyQuotaWeights[blockIndex]) * progressInside;
+
+        float targetRatio = cumulative / totalShare;
+        float actualRatio = (float)deliveredReal / Mathf.Max(1, dailyRealPrizeGoal);
+        float diff = actualRatio - targetRatio;
+
+        if (Mathf.Abs(diff) <= hourlyQuotaTolerance)
+            return probability;
+
+        if (diff > 0f)
+        {
+            float severity = Mathf.Clamp01(diff - hourlyQuotaTolerance);
+            return probability * Mathf.Clamp01(1f - severity);
+        }
+        else
+        {
+            float severity = Mathf.Clamp01(-diff - hourlyQuotaTolerance);
+            return probability * (1f + severity);
+        }
     }
 
     int ChoosePrizeIndex()
