@@ -93,6 +93,8 @@ public class DaySimulator : MonoBehaviour
         selector.maxRealStreak = maxRealPrizesInRow;
         selector.maxSuerteStreak = maxSuerteInRow;
 
+        DailyReportService.Initialize(simulatedDate, prizes, false);
+
         // 5) Calcular cuantos giros por modo segun porcentajes
         int runsM1 = Mathf.RoundToInt(totalRuns * pctMode1);
         int runsM2 = Mathf.RoundToInt(totalRuns * pctMode2);
@@ -123,7 +125,9 @@ public class DaySimulator : MonoBehaviour
                 return;
             }
 
-            if (indexSuerte >= 0 && idx == indexSuerte)
+            bool isSuerte = indexSuerte >= 0 && idx == indexSuerte;
+
+            if (isSuerte)
             {
                 deliveredSuerte++;
             }
@@ -133,6 +137,7 @@ public class DaySimulator : MonoBehaviour
             }
 
             timeline.Add($"{hour},{mode},{prizes[idx].id}");
+            DailyReportService.RegisterSpin(prizes[idx], isSuerte);
         }
 
         for (int i = 0; i < runsM1; i++)
@@ -158,6 +163,7 @@ public class DaySimulator : MonoBehaviour
 
         ExportResults(prizes, delivered, deliveredSuerte);
         ExportTimeline(timeline);
+        DailyReportService.ForceWriteReport();
 
         Debug.Log("[Simulator] Simulacion completada. Archivos exportados en /Data/.");
     }

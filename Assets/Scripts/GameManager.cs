@@ -117,6 +117,7 @@ public class GameManager : MonoBehaviour
     {
         // Mostrar fecha del sistema
         string today = System.DateTime.Today.ToString("yyyy-MM-dd");
+        string sessionDate = today;
         Debug.Log("[GameManager] Fecha del sistema detectada: " + today);
 
         if (popupResultado != null)
@@ -158,10 +159,14 @@ public class GameManager : MonoBehaviour
                 Debug.LogError("[GameManager] testModeDate inválida (" + testModeDate + "). Se usará la fecha real del sistema.");
                 InventoryService.SimulatedDateOverride = null;
             }
+
+            sessionDate = !string.IsNullOrEmpty(InventoryService.SimulatedDateOverride) ? InventoryService.SimulatedDateOverride : today;
         }
         else
         {
             InventoryService.SimulatedDateOverride = null;
+            sessionDate = today;
+            DailyReportService.Initialize(sessionDate, prizes, true);
         }
 
         // 2) Stock base desde inventario.csv (si no existe o falla, quedará en 0 y se registrará el error)
@@ -653,6 +658,7 @@ public class GameManager : MonoBehaviour
         if (!useTestMode)
         {
             InventoryService.SaveState(prizes, remainingStock);
+            DailyReportService.RegisterSpin(prizes[prizeIndex], prizeIndex == indexSuerteProxima);
         }
 
         ShowPopup(prizes[prizeIndex].name);

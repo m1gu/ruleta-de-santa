@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using UnityEngine;
 
@@ -36,8 +37,24 @@ public static class DataPaths
         Path.Combine(DataDir, "inventario.csv");
 
     public static string StateFilePath =>
-        Path.Combine(DataDir, "state.json");
+        GetStateFilePath(DateTime.Today.ToString("yyyy-MM-dd"));
 
     public static string ScheduleFilePath =>
         Path.Combine(DataDir, "horarios.json");
+
+    public static string GetStateFilePath(string date)
+    {
+        string safeDate = string.IsNullOrEmpty(date)
+            ? DateTime.Today.ToString("yyyy-MM-dd")
+            : date;
+        return Path.Combine(DataDir, $"state_{safeDate}.json");
+    }
+
+    public static string GetReportFilePath(string date)
+    {
+        string safeDate = string.IsNullOrEmpty(date)
+            ? DateTime.Today.ToString("yyyy-MM-dd")
+            : date;
+        return Path.Combine(DataDir, $"report_{safeDate}.csv");
+    }
 }

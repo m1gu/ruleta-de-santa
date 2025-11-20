@@ -96,10 +96,7 @@ public static class InventoryService
     
     public static int[] LoadInventoryForToday(List<GameManager.PrizeConfig> prizes)
     {
-        string today = !string.IsNullOrEmpty(SimulatedDateOverride)
-            ? SimulatedDateOverride
-            : System.DateTime.Today.ToString("yyyy-MM-dd");
-
+        string today = ResolveCurrentDate();
         return LoadInventoryForDate(prizes, today);
     }
 
@@ -177,11 +174,12 @@ public static class InventoryService
 // -------- state.json --------
     public static int[] ApplySavedState(List<GameManager.PrizeConfig> prizes, int[] baseStock)
     {
-        string path = DataPaths.StateFilePath;
+        string date = ResolveCurrentDate();
+        string path = DataPaths.GetStateFilePath(date);
         if (!File.Exists(path))
         {
 #if UNITY_EDITOR
-            Debug.Log("[InventoryService] state.json no existe. Uso stock base.");
+            Debug.Log("[InventoryService] state para " + date + " no existe. Uso stock base.");
 #endif
             return baseStock;
         }
@@ -193,13 +191,12 @@ public static class InventoryService
             if (state == null || state.prizes == null || state.prizes.Length == 0)
             {
 #if UNITY_EDITOR
-                Debug.LogWarning("[InventoryService] state.json vacío. Uso stock base.");
+                Debug.LogWarning("[InventoryService] state vacío. Uso stock base.");
 #endif
                 return baseStock;
             }
 
-            string today = DateTime.Today.ToString("yyyy-MM-dd");
-            if (!string.Equals(state.date, today, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(state.date, date, StringComparison.OrdinalIgnoreCase))
             {
 #if UNITY_EDITOR
                 Debug.Log("[InventoryService] state.json es de otro día (" + state.date + "), se ignora.");
@@ -227,7 +224,7 @@ public static class InventoryService
             }
 
 #if UNITY_EDITOR
-            Debug.Log("[InventoryService] state.json aplicado. Inventario restaurado.");
+            Debug.Log("[InventoryService] state restaurado desde " + Path.GetFileName(path));
 #endif
 
             return result;
@@ -239,11 +236,11 @@ public static class InventoryService
         }
     }
 
-    public static void SaveState(List<GameManager.PrizeConfig> prizes, int[] remainingStock)
+    public static void SaveState(List<GameManager.PrizeConfig> prizes, int[] remainingStock, string explicitDate = null)
     {
         try
         {
-            string today = DateTime.Today.ToString("yyyy-MM-dd");
+            string today = !string.IsNullOrEmpty(explicitDate) ? explicitDate : ResolveCurrentDate();
 
             StateFile state = new StateFile();
             state.date = today;
@@ -259,10 +256,11 @@ public static class InventoryService
             }
 
             string json = JsonUtility.ToJson(state, true);
-            File.WriteAllText(DataPaths.StateFilePath, json);
+            string pathFile = DataPaths.GetStateFilePath(today);
+            File.WriteAllText(pathFile, json);
 
 #if UNITY_EDITOR
-            Debug.Log("[InventoryService] state.json guardado en " + DataPaths.StateFilePath);
+            Debug.Log("[InventoryService] state guardado en " + pathFile);
 #endif
         }
         catch (Exception ex)
@@ -270,4 +268,11 @@ public static class InventoryService
             Debug.LogError("[InventoryService] Error guardando state.json: " + ex.Message);
         }
     }
+    static string ResolveCurrentDate()
+    {
+        return !string.IsNullOrEmpty(SimulatedDateOverride)
+            ? SimulatedDateOverride
+            : DateTime.Today.ToString("yyyy-MM-dd");
+    }
+
 }
