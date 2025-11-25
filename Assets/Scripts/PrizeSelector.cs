@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -14,6 +14,9 @@ public class PrizeSelector
     private float manualDayProgress = 0f;
     private int consecutiveRealResults = 0;
     private int consecutiveSuerteResults = 0;
+    private int indexTazas = -1;
+    private int indexBombillos = -1;
+    private int lastAltRealIndex = -1;
 
     // Parámetros de pacing
     public float minRealProb = 0.10f;
@@ -51,6 +54,15 @@ public class PrizeSelector
         }
 
         dailyRealPrizeGoal = initialRealStock;
+
+        for (int i = 0; i < prizes.Count; i++)
+        {
+            var id = prizes[i].id;
+            if (string.Equals(id, "TAZAS", StringComparison.OrdinalIgnoreCase))
+                indexTazas = i;
+            else if (string.Equals(id, "BOMBILLOS", StringComparison.OrdinalIgnoreCase))
+                indexBombillos = i;
+        }
     }
 
     public void SetManualDayProgress(float progress01)
@@ -77,7 +89,7 @@ public class PrizeSelector
 
         bool hasSuerteAvailable = indexSuerte >= 0;
 
-        // 2) Si NO hay premios reales pero si SUERTEPROXIMA - solo suerte (infinito)
+        // 2) Si NO hay premios reales pero sí SUERTEPROXIMA - solo suerte (infinito)
         if (totalRealStock <= 0)
         {
             if (hasSuerteAvailable)
@@ -89,10 +101,10 @@ public class PrizeSelector
             return -1; // caso extremo
         }
 
-        // 3) Cuantos spins faltan en el dia (para el simulador)
+        // 3) Cuántos spins faltan en el día (para el simulador)
         int remainingSpins = Mathf.Max(1, totalPlannedSpins - spinsDone + 1);
 
-        // Si hay MAS premios reales que spins restantes,
+        // Si hay MÁS premios reales que spins restantes,
         // debemos dar SIEMPRE premio real para no dejar stock sin usar.
         bool forceReal = totalRealStock >= remainingSpins;
         bool forceRealByStreak = maxSuerteStreak > 0 && consecutiveSuerteResults >= maxSuerteStreak;
@@ -100,11 +112,12 @@ public class PrizeSelector
 
         if (forceRealByStreak)
         {
-            int forcedIdx = ChoosePrize(mode);
+            int forcedIdx = ApplyAlternation(ChoosePrize(mode));
             if (forcedIdx >= 0 && forcedIdx != indexSuerte)
             {
                 remaining[forcedIdx] = Mathf.Max(0, remaining[forcedIdx] - 1);
                 UpdateStreak(true);
+                UpdateAlternationState(forcedIdx);
                 return forcedIdx;
             }
         }
@@ -121,7 +134,7 @@ public class PrizeSelector
             float pReal = ComputePacing(totalRealStock);
             float r = UnityEngine.Random.value;
 
-            // Si este giro NO dara premio real - SUERTEPROXIMA (sin gastar stock)
+            // Si este giro NO dará premio real - SUERTEPROXIMA (sin gastar stock)
             if (r > pReal && hasSuerteAvailable)
             {
                 UpdateStreak(false);
@@ -129,14 +142,14 @@ public class PrizeSelector
             }
         }
 
-        // 5) Elegir premio real segun modo (1,2,3)
-        int idx = ChoosePrize(mode);
+        // 5) Elegir premio real según modo (1,2,3)
+        int idx = ApplyAlternation(ChoosePrize(mode));
 
         if (idx >= 0 && idx != indexSuerte)
         {
-            // Descontar stock SOLO de premios reales
             remaining[idx] = Mathf.Max(0, remaining[idx] - 1);
             UpdateStreak(true);
+            UpdateAlternationState(idx);
             return idx;
         }
 
@@ -150,9 +163,6 @@ public class PrizeSelector
         return -1;
     }
 
-    /// <summary>
-    /// Probabilidad de premio real en función del progreso del día.
-    /// </summary>
     float ComputePacing(int remainingReal)
     {
         if (dailyRealPrizeGoal <= 0 || expectedSpinsPerDay <= 0)
@@ -176,9 +186,6 @@ public class PrizeSelector
         return Mathf.Clamp(p, minRealProb, maxRealProb);
     }
 
-    /// <summary>
-    /// Calcula el progreso del día utilizado para el pacing.
-    /// </summary>
     float GetCurrentDayProgress()
     {
         if (hasManualDayProgress)
@@ -244,13 +251,45 @@ public class PrizeSelector
             float severity = Mathf.Clamp01(diff - hourlyQuotaTolerance);
             return probability * Mathf.Clamp01(1f - severity);
         }
-        else
-        {
-            float severity = Mathf.Clamp01(-diff - hourlyQuotaTolerance);
-            return probability * (1f + severity);
-        }
+
+        float severityNeg = Mathf.Clamp01(-diff - hourlyQuotaTolerance);
+        return probability * (1f + severityNeg);
     }
 
+    int ApplyAlternation(int idx)
+    {
+        if (idx < 0) return idx;
+
+        bool isTazas = idx == indexTazas;
+        bool isBombillos = idx == indexBombillos;
+
+        if (!isTazas && !isBombillos)
+            return idx;
+
+        if (lastAltRealIndex < 0)
+            return idx;
+
+        if (isTazas && lastAltRealIndex == indexTazas)
+        {
+            if (indexBombillos >= 0 && remaining[indexBombillos] > 0)
+                return indexBombillos;
+        }
+        else if (isBombillos && lastAltRealIndex == indexBombillos)
+        {
+            if (indexTazas >= 0 && remaining[indexTazas] > 0)
+                return indexTazas;
+        }
+
+        return idx;
+    }
+
+    void UpdateAlternationState(int idx)
+    {
+        if (idx == indexTazas || idx == indexBombillos)
+            lastAltRealIndex = idx;
+    }
+
+    /// <summary>
     /// Elige índice de premio real (NO incluye SUERTEPROXIMA) según el modo.
     /// Modo 1: Small
     /// Modo 2: Small + Medium

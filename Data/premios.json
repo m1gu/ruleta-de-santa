@@ -2,14 +2,14 @@
   "prizes": [
     {
       "id": "TAZAS",
-      "name": "TAZAS PERSONALIZADAS",
+      "name": "TAZA PERSONALIZADA",
       "category": "Small",
       "weight": 10,
       "initialStock": 1000
     },
     {
       "id": "BOMBILLOS",
-      "name": "BOMBILLOS PERSONALIZADOS",
+      "name": "BOMBILLO PERSONALIZADO",
       "category": "Small",
       "weight": 10,
       "initialStock": 2000
@@ -58,7 +58,7 @@
     },
     {
       "id": "ENTRADASCINE",
-      "name": "ENTRADAS AL CINE",
+      "name": "ENTRADA AL CINE",
       "category": "Small",
       "weight": 10,
       "initialStock": 650

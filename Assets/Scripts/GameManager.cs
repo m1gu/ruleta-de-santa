@@ -122,6 +122,9 @@ public class GameManager : MonoBehaviour
     private int consecutiveRealPrizes = 0;
     private int consecutiveSuerteResults = 0;
     private Texture2D modeIndicatorTexture;
+    private int indexTazas = -1;
+    private int indexBombillos = -1;
+    private int lastAltRealIndex = -1;
 
     void Start()
     {
@@ -212,6 +215,15 @@ public class GameManager : MonoBehaviour
         }
         Debug.Log("[GameManager] Stock real inicial del día (sin SUERTEPROXIMA): " + initialRealStock);
         dailyRealPrizeGoal = initialRealStock;
+
+        // 2.3) Indices para alternar TAZAS/BOMBILLOS
+        for (int i = 0; i < prizes.Count; i++)
+        {
+            if (string.Equals(prizes[i].id, "TAZAS", System.StringComparison.OrdinalIgnoreCase))
+                indexTazas = i;
+            else if (string.Equals(prizes[i].id, "BOMBILLOS", System.StringComparison.OrdinalIgnoreCase))
+                indexBombillos = i;
+        }
 
         // 3) Aplicar estado guardado (state.json) solo en corridas reales
         if (useTestMode)
@@ -360,7 +372,7 @@ public class GameManager : MonoBehaviour
 
         if (forceRealByStreak)
         {
-            int forcedIndex = ChoosePrizeIndex();
+            int forcedIndex = ApplyAlternation(ChoosePrizeIndex());
             if (forcedIndex >= 0)
             {
                 StartCoroutine(SpinAndShow(forcedIndex));
@@ -402,7 +414,7 @@ public class GameManager : MonoBehaviour
         }
 
         // 5) Caso normal: hay premios reales → usar lógica normal de selección
-        int chosenIndex = ChoosePrizeIndex();
+        int chosenIndex = ApplyAlternation(ChoosePrizeIndex());
         if (chosenIndex < 0)
         {
             Debug.LogWarning("GameManager: No se pudo elegir premio real. Se intentará SUERTEPROXIMA si existe.");
@@ -583,6 +595,33 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    int ApplyAlternation(int idx)
+    {
+        if (idx < 0) return idx;
+
+        bool isTazas = idx == indexTazas;
+        bool isBombillos = idx == indexBombillos;
+
+        if (!isTazas && !isBombillos)
+            return idx;
+
+        if (lastAltRealIndex < 0)
+            return idx;
+
+        if (isTazas && lastAltRealIndex == indexTazas)
+        {
+            if (indexBombillos >= 0 && remainingStock != null && remainingStock.Length > indexBombillos && remainingStock[indexBombillos] > 0)
+                return indexBombillos;
+        }
+        else if (isBombillos && lastAltRealIndex == indexBombillos)
+        {
+            if (indexTazas >= 0 && remainingStock != null && remainingStock.Length > indexTazas && remainingStock[indexTazas] > 0)
+                return indexTazas;
+        }
+
+        return idx;
+    }
+
     int ChoosePrizeByCategory(List<int> smallList, List<int> mediumList, List<int> largeList, bool includeLarge)
     {
         bool hasSmall = smallList.Count > 0;
@@ -726,6 +765,15 @@ public class GameManager : MonoBehaviour
         if (prizeIndex != indexSuerteProxima)
         {
             remainingStock[prizeIndex] = Mathf.Max(0, remainingStock[prizeIndex] - 1);
+        }
+        else
+        {
+            // mantener lastAltRealIndex solo cuando se entrega premio real alternable
+        }
+
+        if (prizeIndex == indexTazas || prizeIndex == indexBombillos)
+        {
+            lastAltRealIndex = prizeIndex;
         }
 
         lastResultIndex = prizeIndex;
