@@ -36,7 +36,6 @@ public class DaySimulator : MonoBehaviour
     // Internos para extras (modo 4)
     int indexTazas = -1;
     int indexBombillos = -1;
-    int lastAltExtraIndex = -1;
     int extraTazasCount = 0;
     int extraBombillosCount = 0;
 
@@ -79,7 +78,6 @@ public class DaySimulator : MonoBehaviour
         InventoryService.SimulatedDateOverride = null;
         extraTazasCount = 0;
         extraBombillosCount = 0;
-        lastAltExtraIndex = -1;
 
 #if UNITY_EDITOR
         int totalInv = 0;
@@ -200,7 +198,6 @@ public class DaySimulator : MonoBehaviour
                 {
                     if (idx == indexTazas) extraTazasCount++;
                     else if (idx == indexBombillos) extraBombillosCount++;
-                    lastAltExtraIndex = idx;
                 }
             }
 
@@ -338,14 +335,8 @@ public class DaySimulator : MonoBehaviour
         if (!hasTazas && !hasBombillos)
             return -1;
 
-        if (lastAltExtraIndex < 0)
-            return hasTazas ? indexTazas : indexBombillos;
-
-        if (lastAltExtraIndex == indexTazas && hasBombillos)
-            return indexBombillos;
-
-        if (lastAltExtraIndex == indexBombillos && hasTazas)
-            return indexTazas;
+        if (hasTazas && hasBombillos)
+            return UnityEngine.Random.value < 0.5f ? indexTazas : indexBombillos;
 
         return hasTazas ? indexTazas : indexBombillos;
     }

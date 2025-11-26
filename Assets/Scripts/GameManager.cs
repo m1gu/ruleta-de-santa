@@ -1,4 +1,4 @@
-ï»¿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
@@ -24,7 +24,7 @@ public class GameManager : MonoBehaviour
     [System.Serializable]
     public class PrizeConfig
     {
-        public string id;                 // identificador Ãºnico (ej: "TAZAS")
+        public string id;                 // identificador único (ej: "TAZAS")
         public string name;              // texto visible
         public PrizeCategory category;
         public float weight = 1f;
@@ -62,7 +62,7 @@ public class GameManager : MonoBehaviour
     [Tooltip("Fecha simulada en formato yyyy-MM-dd.")]
     public string testModeDate = "2025-11-20";
 
-[Header("Probabilidades por categorï¿½a (Modos 2 y 3)")]
+[Header("Probabilidades por categor?a (Modos 2 y 3)")]
     [Range(0f, 1f)]
     public float mode2SmallProbability = 0.8f;
     [Range(0f, 1f)]
@@ -80,17 +80,17 @@ public class GameManager : MonoBehaviour
     public AudioClip prizeClip;   // premio.mp3
     // AUDIO <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-    [Header("Pacing / DosificaciÃ³n")]
+    [Header("Pacing / Dosificación")]
     public bool useAdaptivePacing = true;
-    [Tooltip("Giros esperados por dÃ­a (para repartir premios)")]
+    [Tooltip("Giros esperados por día (para repartir premios)")]
     public int expectedSpinsPerDay = 500;
     [Range(0f, 1f)]
-    public float minRealPrizeProbability = 0.10f;   // mÃ­nimo 10% de giros con premio real
+    public float minRealPrizeProbability = 0.10f;   // mínimo 10% de giros con premio real
     [Range(0f, 1f)]
-    public float maxRealPrizeProbability = 0.90f;   // mÃ¡ximo 90% de giros con premio real
+    public float maxRealPrizeProbability = 0.90f;   // máximo 90% de giros con premio real
     [Range(0f, 1f)]
-    public float pacingAdjustmentStrength = 0.5f;   // quÃ© tan fuerte corrige segÃºn la hora
-    [Tooltip("Curva acumulativa deseada de premios reales entregados en el dÃ­a (0=inicio, 1=fin).")]
+    public float pacingAdjustmentStrength = 0.5f;   // qué tan fuerte corrige según la hora
+    [Tooltip("Curva acumulativa deseada de premios reales entregados en el día (0=inicio, 1=fin).")]
     public AnimationCurve realPrizeDistributionCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
     [Tooltip("Hora (24h) en la que inicia la jornada.")]
     public float dayStartHour = 11f;
@@ -117,14 +117,13 @@ public class GameManager : MonoBehaviour
     private int indexSuerteProxima = -1;
 
     private int spinsToday = 0;
-    private int initialRealStock = 0;   // stock real planificado para el dÃ­a (sin SUERTEPROXIMA)
+    private int initialRealStock = 0;   // stock real planificado para el día (sin SUERTEPROXIMA)
     private int dailyRealPrizeGoal = 0;
     private int consecutiveRealPrizes = 0;
     private int consecutiveSuerteResults = 0;
     private Texture2D modeIndicatorTexture;
     private int indexTazas = -1;
     private int indexBombillos = -1;
-    private int lastAltRealIndex = -1;
     private bool isExtraSpin = false;
 
     void Start()
@@ -149,7 +148,7 @@ public class GameManager : MonoBehaviour
         // AUDIO (opcional: aviso si falta algo)
         if (audioSource == null)
         {
-            Debug.LogWarning("[GameManager] audioSource no asignado. No se reproducirÃ¡ sonido.");
+            Debug.LogWarning("[GameManager] audioSource no asignado. No se reproducirá sonido.");
         }
 
         // 1) Cargar premios desde JSON (si existe)
@@ -170,7 +169,7 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                Debug.LogError("[GameManager] testModeDate invÃ¡lida (" + testModeDate + "). Se usarÃ¡ la fecha real del sistema.");
+                Debug.LogError("[GameManager] testModeDate inválida (" + testModeDate + "). Se usará la fecha real del sistema.");
                 InventoryService.SimulatedDateOverride = null;
             }
 
@@ -183,10 +182,10 @@ public class GameManager : MonoBehaviour
             DailyReportService.Initialize(sessionDate, prizes, true);
         }
 
-        // 2) Stock base desde inventario.csv (si no existe o falla, quedarÃ¡ en 0 y se registrarÃ¡ el error)
+        // 2) Stock base desde inventario.csv (si no existe o falla, quedará en 0 y se registrará el error)
         int[] baseStock = InventoryService.LoadInventoryForToday(prizes);
 
-        // 2.1) Buscar el Ã­ndice del premio "suerte para la prÃ³xima"
+        // 2.1) Buscar el índice del premio "suerte para la próxima"
         indexSuerteProxima = -1;
         for (int i = 0; i < prizes.Count; i++)
         {
@@ -200,21 +199,21 @@ public class GameManager : MonoBehaviour
 
         if (indexSuerteProxima >= 0)
         {
-            Debug.Log("[GameManager] Premio SUERTEPROXIMA encontrado en Ã­ndice: " + indexSuerteProxima);
+            Debug.Log("[GameManager] Premio SUERTEPROXIMA encontrado en índice: " + indexSuerteProxima);
         }
         else
         {
-            Debug.LogWarning("[GameManager] No se encontrÃ³ premio con id = SUERTEPROXIMA. El modo 'solo suerte' no podrÃ¡ activarse.");
+            Debug.LogWarning("[GameManager] No se encontró premio con id = SUERTEPROXIMA. El modo 'solo suerte' no podrá activarse.");
         }
 
-        // 2.2) Calcular stock real inicial del dÃ­a (sin SUERTEPROXIMA)
+        // 2.2) Calcular stock real inicial del día (sin SUERTEPROXIMA)
         initialRealStock = 0;
         for (int i = 0; i < baseStock.Length; i++)
         {
             if (i == indexSuerteProxima) continue;
             initialRealStock += Mathf.Max(0, baseStock[i]);
         }
-        Debug.Log("[GameManager] Stock real inicial del dÃ­a (sin SUERTEPROXIMA): " + initialRealStock);
+        Debug.Log("[GameManager] Stock real inicial del día (sin SUERTEPROXIMA): " + initialRealStock);
         dailyRealPrizeGoal = initialRealStock;
 
         // 2.3) Indices para alternar TAZAS/BOMBILLOS
@@ -342,7 +341,7 @@ public class GameManager : MonoBehaviour
         int totalRealStock = 0;
         for (int i = 0; i < remainingStock.Length; i++)
         {
-            if (i == indexSuerteProxima) continue; // ignoramos "suerte para la prÃ³xima"
+            if (i == indexSuerteProxima) continue; // ignoramos "suerte para la próxima"
             totalRealStock += remainingStock[i];
         }
 
@@ -361,11 +360,11 @@ public class GameManager : MonoBehaviour
 
         if (totalStock <= 0 && currentMode != 4)
         {
-            Debug.LogWarning("GameManager: Sin stock disponible de ningÃºn premio (incluyendo SUERTEPROXIMA).");
+            Debug.LogWarning("GameManager: Sin stock disponible de ningún premio (incluyendo SUERTEPROXIMA).");
             return;
         }
 
-        // 4) A partir de aquÃ­ sÃ­ habrÃ¡ un giro
+        // 4) A partir de aquí sí habrá un giro
         spinsToday++;
 
         if (currentMode == 4)
@@ -416,7 +415,7 @@ public class GameManager : MonoBehaviour
 
         if (forceRealByStreak)
         {
-            int forcedIndex = ApplyAlternation(ChoosePrizeIndex());
+            int forcedIndex = ChoosePrizeIndex();
             if (forcedIndex >= 0)
             {
                 StartCoroutine(SpinAndShow(forcedIndex));
@@ -443,7 +442,7 @@ public class GameManager : MonoBehaviour
 
             if (r > pReal)
             {
-                // Giro sin premio real -> SUERTEPROXIMA, si estÃ¡ disponible
+                // Giro sin premio real -> SUERTEPROXIMA, si está disponible
                 if (indexSuerteProxima >= 0 && remainingStock[indexSuerteProxima] > 0)
                 {
                     Debug.Log($"[GameManager] Giro sin premio real (pReal={pReal:F2}). Se entrega SUERTEPROXIMA.");
@@ -452,16 +451,16 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    Debug.Log("[GameManager] Giro sin premio real, pero SUERTEPROXIMA no disponible. Se intentarÃ¡ premio real.");
+                    Debug.Log("[GameManager] Giro sin premio real, pero SUERTEPROXIMA no disponible. Se intentará premio real.");
                 }
             }
         }
 
-        // 5) Caso normal: hay premios reales â†’ usar lÃ³gica normal de selecciÃ³n
-        int chosenIndex = ApplyAlternation(ChoosePrizeIndex());
+        // 5) Caso normal: hay premios reales ? usar lógica normal de selección
+        int chosenIndex = ChoosePrizeIndex();
         if (chosenIndex < 0)
         {
-            Debug.LogWarning("GameManager: No se pudo elegir premio real. Se intentarÃ¡ SUERTEPROXIMA si existe.");
+            Debug.LogWarning("GameManager: No se pudo elegir premio real. Se intentará SUERTEPROXIMA si existe.");
 
             if (indexSuerteProxima >= 0 && remainingStock[indexSuerteProxima] > 0)
             {
@@ -630,40 +629,13 @@ public class GameManager : MonoBehaviour
                     return ChoosePrizeByCategory(small, medium, large, includeLarge: false);
                 }
 
-            // Modo 3: Small + Medium + Large con probabilidades por categorï¿½a
+            // Modo 3: Small + Medium + Large con probabilidades por categor?a
             case 3:
             default:
                 {
                     return ChoosePrizeByCategory(small, medium, large, includeLarge: true);
                 }
         }
-    }
-
-    int ApplyAlternation(int idx)
-    {
-        if (idx < 0) return idx;
-
-        bool isTazas = idx == indexTazas;
-        bool isBombillos = idx == indexBombillos;
-
-        if (!isTazas && !isBombillos)
-            return idx;
-
-        if (lastAltRealIndex < 0)
-            return idx;
-
-        if (isTazas && lastAltRealIndex == indexTazas)
-        {
-            if (indexBombillos >= 0 && remainingStock != null && remainingStock.Length > indexBombillos && remainingStock[indexBombillos] > 0)
-                return indexBombillos;
-        }
-        else if (isBombillos && lastAltRealIndex == indexBombillos)
-        {
-            if (indexTazas >= 0 && remainingStock != null && remainingStock.Length > indexTazas && remainingStock[indexTazas] > 0)
-                return indexTazas;
-        }
-
-        return idx;
     }
 
     int ChooseExtraPrizeIndex()
@@ -674,14 +646,10 @@ public class GameManager : MonoBehaviour
         if (!hasTazas && !hasBombillos)
             return -1;
 
-        if (lastAltRealIndex < 0)
-            return hasTazas ? indexTazas : indexBombillos;
-
-        if (lastAltRealIndex == indexTazas && hasBombillos)
-            return indexBombillos;
-
-        if (lastAltRealIndex == indexBombillos && hasTazas)
-            return indexTazas;
+        if (hasTazas && hasBombillos)
+        {
+            return UnityEngine.Random.value < 0.5f ? indexTazas : indexBombillos;
+        }
 
         return hasTazas ? indexTazas : indexBombillos;
     }
@@ -776,7 +744,7 @@ public class GameManager : MonoBehaviour
 
         if (wheelBuilder.angleCenters == null || wheelBuilder.angleCenters.Count == 0)
         {
-            Debug.LogError("GameManager: wheelBuilder.angleCenters vacÃ­o. Haz 'Rebuild Wheel'.");
+            Debug.LogError("GameManager: wheelBuilder.angleCenters vacío. Haz 'Rebuild Wheel'.");
             yield break;
         }
 
@@ -832,12 +800,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            // mantener lastAltRealIndex solo cuando se entrega premio real alternable
-        }
-
-        if (prizeIndex == indexTazas || prizeIndex == indexBombillos)
-        {
-            lastAltRealIndex = prizeIndex;
+            // mantener  solo cuando se entrega premio real alternable
         }
 
         lastResultIndex = prizeIndex;
@@ -924,3 +887,5 @@ public class GameManager : MonoBehaviour
         }
     }
 }
+
+
