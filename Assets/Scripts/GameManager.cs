@@ -125,6 +125,7 @@ public class GameManager : MonoBehaviour
     private int indexTazas = -1;
     private int indexBombillos = -1;
     private int lastAltRealIndex = -1;
+    private bool isExtraSpin = false;
 
     void Start()
     {
@@ -238,7 +239,7 @@ public class GameManager : MonoBehaviour
         // 4) Sincronizar ruleta con la lista de premios
         SyncWheelWithPrizes();
 
-        SetCurrentMode(Mathf.Clamp(currentMode, 1, 3));
+        SetCurrentMode(Mathf.Clamp(currentMode, 1, 4));
         state = GameState.Idle;
     }
 
@@ -301,11 +302,15 @@ public class GameManager : MonoBehaviour
         {
             SetCurrentMode(3);
         }
+        else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
+        {
+            SetCurrentMode(4);
+        }
     }
 
     void SetCurrentMode(int newMode)
     {
-        newMode = Mathf.Clamp(newMode, 1, 3);
+        newMode = Mathf.Clamp(newMode, 1, 4);
         if (newMode == currentMode)
             return;
 
@@ -322,6 +327,11 @@ public class GameManager : MonoBehaviour
 
     void OnStartSpinRequested()
     {
+        if (Input.GetKeyDown(KeyCode.Alpha4))
+        {
+            SetCurrentMode(4);
+        }
+
         if (remainingStock == null || remainingStock.Length == 0)
         {
             Debug.LogWarning("GameManager: remainingStock no inicializado.");
@@ -336,27 +346,20 @@ public class GameManager : MonoBehaviour
             totalRealStock += remainingStock[i];
         }
 
-        // 2) Caso: ya no hay premios reales, pero sí tenemos SUERTEPROXIMA
-        if (totalRealStock <= 0 && indexSuerteProxima >= 0)
+        // 2) Si no quedan premios reales, activar modo 4 (extras infinitos)
+        if (totalRealStock <= 0)
         {
-            if (remainingStock[indexSuerteProxima] <= 0)
-            {
-                Debug.LogWarning("GameManager: Solo queda SUERTEPROXIMA pero su stock es 0. No se puede continuar.");
-                return;
-            }
-
-            Debug.Log("[GameManager] Sin stock de premios reales. Solo se entregará SUERTEPROXIMA.");
-            spinsToday++;
-            StartCoroutine(SpinAndShow(indexSuerteProxima));
-            return;
+            SetCurrentMode(4);
         }
 
-        // 3) Caso: no hay NADA de stock (ni reales ni SUERTEPROXIMA)
+        // 3) Caso: no hay NADA de stock (ni reales ni SUERTEPROXIMA) y no se usa modo 4
         int totalStock = 0;
         for (int i = 0; i < remainingStock.Length; i++)
             totalStock += remainingStock[i];
 
-        if (totalStock <= 0)
+        bool hasSuerteAvailable = (indexSuerteProxima >= 0 && remainingStock[indexSuerteProxima] > 0);
+
+        if (totalStock <= 0 && currentMode != 4)
         {
             Debug.LogWarning("GameManager: Sin stock disponible de ningún premio (incluyendo SUERTEPROXIMA).");
             return;
@@ -365,8 +368,49 @@ public class GameManager : MonoBehaviour
         // 4) A partir de aquí sí habrá un giro
         spinsToday++;
 
+        if (currentMode == 4)
+        {
+            float pReal = ComputeRealPrizeProbability(totalRealStock);
+            float r = Random.value;
+
+            bool forceSuerteByStreakM4 = maxRealPrizesInRow > 0 && consecutiveRealPrizes >= maxRealPrizesInRow && hasSuerteAvailable;
+            bool forceRealExtraByStreak = maxSuerteInRow > 0 && consecutiveSuerteResults >= maxSuerteInRow;
+
+            if (forceSuerteByStreakM4)
+            {
+                isExtraSpin = false;
+                StartCoroutine(SpinAndShow(indexSuerteProxima));
+                return;
+            }
+
+            if (!forceRealExtraByStreak && r > pReal && hasSuerteAvailable)
+            {
+                isExtraSpin = false;
+                StartCoroutine(SpinAndShow(indexSuerteProxima));
+                return;
+            }
+
+            int extraIndex = ChooseExtraPrizeIndex();
+            if (extraIndex < 0)
+            {
+                if (hasSuerteAvailable)
+                {
+                    isExtraSpin = false;
+                    StartCoroutine(SpinAndShow(indexSuerteProxima));
+                }
+                else
+                {
+                    Debug.LogWarning("GameManager: No hay TAZAS/BOMBILLOS definidos para modo 4.");
+                }
+                return;
+            }
+
+            isExtraSpin = true;
+            StartCoroutine(SpinAndShow(extraIndex));
+            return;
+        }
+
         bool hasRealStock = totalRealStock > 0;
-        bool hasSuerteAvailable = (indexSuerteProxima >= 0 && remainingStock[indexSuerteProxima] > 0);
         bool forceRealByStreak = maxSuerteInRow > 0 && consecutiveSuerteResults >= maxSuerteInRow && hasRealStock;
         bool forceSuerteByStreak = maxRealPrizesInRow > 0 && consecutiveRealPrizes >= maxRealPrizesInRow && hasSuerteAvailable;
 
@@ -622,6 +666,26 @@ public class GameManager : MonoBehaviour
         return idx;
     }
 
+    int ChooseExtraPrizeIndex()
+    {
+        bool hasTazas = indexTazas >= 0;
+        bool hasBombillos = indexBombillos >= 0;
+
+        if (!hasTazas && !hasBombillos)
+            return -1;
+
+        if (lastAltRealIndex < 0)
+            return hasTazas ? indexTazas : indexBombillos;
+
+        if (lastAltRealIndex == indexTazas && hasBombillos)
+            return indexBombillos;
+
+        if (lastAltRealIndex == indexBombillos && hasTazas)
+            return indexTazas;
+
+        return hasTazas ? indexTazas : indexBombillos;
+    }
+
     int ChoosePrizeByCategory(List<int> smallList, List<int> mediumList, List<int> largeList, bool includeLarge)
     {
         bool hasSmall = smallList.Count > 0;
@@ -762,7 +826,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        if (prizeIndex != indexSuerteProxima)
+        if (prizeIndex != indexSuerteProxima && !isExtraSpin)
         {
             remainingStock[prizeIndex] = Mathf.Max(0, remainingStock[prizeIndex] - 1);
         }
@@ -778,11 +842,17 @@ public class GameManager : MonoBehaviour
 
         lastResultIndex = prizeIndex;
 
-        if (!useTestMode)
+        if (!useTestMode && !isExtraSpin)
         {
             InventoryService.SaveState(prizes, remainingStock);
-            DailyReportService.RegisterSpin(prizes[prizeIndex], prizeIndex == indexSuerteProxima);
+            DailyReportService.RegisterSpin(prizes[prizeIndex], prizeIndex == indexSuerteProxima, false);
         }
+        else if (!useTestMode && isExtraSpin)
+        {
+            DailyReportService.RegisterSpin(prizes[prizeIndex], false, true);
+        }
+
+        isExtraSpin = false;
 
         ShowPopup(prizes[prizeIndex].name);
         UpdateStreakCounters(prizeIndex);
@@ -847,8 +917,10 @@ public class GameManager : MonoBehaviour
             case 2:
                 return new Rect(Screen.width - size - padding, padding, size, size);
             case 3:
-            default:
                 return new Rect(padding, Screen.height - size - padding, size, size);
+            case 4:
+            default:
+                return new Rect(Screen.width - size - padding, Screen.height - size - padding, size, size);
         }
     }
 }

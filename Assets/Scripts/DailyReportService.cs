@@ -14,6 +14,7 @@ public static class DailyReportService
 
     static readonly StringComparer IdComparer = StringComparer.OrdinalIgnoreCase;
     static Dictionary<string, PrizeSummary> summaries = new Dictionary<string, PrizeSummary>(IdComparer);
+    static Dictionary<string, PrizeSummary> extraSummaries = new Dictionary<string, PrizeSummary>(IdComparer);
     static List<GameManager.PrizeConfig> cachedPrizes = new List<GameManager.PrizeConfig>();
     static string activeDate = null;
     static bool initialized = false;
@@ -42,7 +43,7 @@ public static class DailyReportService
         WriteReport(true); // crea archivo vacio para el dia
     }
 
-    public static void RegisterSpin(GameManager.PrizeConfig prize, bool isSuerte)
+    public static void RegisterSpin(GameManager.PrizeConfig prize, bool isSuerte, bool isExtra = false)
     {
         if (!initialized)
         {
@@ -58,7 +59,9 @@ public static class DailyReportService
 
         if (prize != null && !string.IsNullOrEmpty(prize.id))
         {
-            if (!summaries.TryGetValue(prize.id, out var summary))
+            var target = isExtra ? extraSummaries : summaries;
+
+            if (!target.TryGetValue(prize.id, out var summary))
             {
                 summary = new PrizeSummary
                 {
@@ -66,7 +69,7 @@ public static class DailyReportService
                     Name = prize.name ?? prize.id,
                     Delivered = 0
                 };
-                summaries[prize.id] = summary;
+                target[prize.id] = summary;
             }
 
             summary.Name = prize.name ?? prize.id;
@@ -85,6 +88,7 @@ public static class DailyReportService
     static void ResetCounters()
     {
         summaries = new Dictionary<string, PrizeSummary>(IdComparer);
+        extraSummaries = new Dictionary<string, PrizeSummary>(IdComparer);
         foreach (var prize in cachedPrizes)
         {
             if (prize == null || string.IsNullOrEmpty(prize.id)) continue;
@@ -142,6 +146,15 @@ public static class DailyReportService
                 {
                     if (entry.Delivered <= 0) continue;
                     sw.WriteLine($"{EscapeCsv(entry.Id)},{EscapeCsv(entry.Name)},{entry.Delivered}");
+                }
+
+                // Extras (TAZAS/BOMBILLOS u otros)
+                sw.WriteLine();
+                sw.WriteLine("ExtraPrizeID,PrizeName,Delivered");
+                foreach (var entry in extraSummaries.Values)
+                {
+                    if (entry.Delivered <= 0) continue;
+                    sw.WriteLine($"{EscapeCsv(entry.Id + "_EXTRA")},{EscapeCsv(entry.Name)},{entry.Delivered}");
                 }
             }
         }
