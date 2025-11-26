@@ -33,6 +33,13 @@ public class DaySimulator : MonoBehaviour
         1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f
     };
 
+    // Internos para extras (modo 4)
+    int indexTazas = -1;
+    int indexBombillos = -1;
+    int lastAltExtraIndex = -1;
+    int extraTazasCount = 0;
+    int extraBombillosCount = 0;
+
     [Header("Export")]
     public string outputFilename = "simulacion_resultados.csv";
     public string timelineFilename = "simulacion_timeline.csv";
@@ -70,6 +77,9 @@ public class DaySimulator : MonoBehaviour
 
         // Limpiar override para no afectar nada mas
         InventoryService.SimulatedDateOverride = null;
+        extraTazasCount = 0;
+        extraBombillosCount = 0;
+        lastAltExtraIndex = -1;
 
 #if UNITY_EDITOR
         int totalInv = 0;
@@ -92,6 +102,21 @@ public class DaySimulator : MonoBehaviour
         if (indexSuerte < 0)
         {
             Debug.LogWarning("[Simulator] No se encontro premio con id SUERTEPROXIMA.");
+        }
+
+        int initialRealStock = 0;
+        for (int i = 0; i < baseStock.Length; i++)
+        {
+            if (i == indexSuerte) continue;
+            initialRealStock += Mathf.Max(0, baseStock[i]);
+        }
+
+        for (int i = 0; i < prizes.Count; i++)
+        {
+            if (string.Equals(prizes[i].id, "TAZAS", System.StringComparison.OrdinalIgnoreCase))
+                indexTazas = i;
+            else if (string.Equals(prizes[i].id, "BOMBILLOS", System.StringComparison.OrdinalIgnoreCase))
+                indexBombillos = i;
         }
 
         // 4) Crear selector con la misma logica de premios que el juego (sin animacion)
@@ -131,8 +156,27 @@ public class DaySimulator : MonoBehaviour
         // 7) Contadores de premios entregados
         int[] delivered = new int[prizes.Count];
         int deliveredSuerte = 0;
+        int currentRealStock = initialRealStock;
+        bool extrasActive = false;
+        int consecutiveReal = 0;
+        int consecutiveSuerte = 0;
+        int spinsDone = 0;
 
-        void RegisterLocal(int idx, int mode)
+        void UpdateStreaks(bool isSuerte)
+        {
+            if (isSuerte)
+            {
+                consecutiveSuerte++;
+                consecutiveReal = 0;
+            }
+            else
+            {
+                consecutiveReal++;
+                consecutiveSuerte = 0;
+            }
+        }
+
+        void RegisterLocal(int idx, int mode, bool isExtra)
         {
             string hour = t.ToString("HH:mm");
 
@@ -150,31 +194,79 @@ public class DaySimulator : MonoBehaviour
             }
             else
             {
-                delivered[idx]++;
+                if (!isExtra)
+                    delivered[idx]++;
+                else
+                {
+                    if (idx == indexTazas) extraTazasCount++;
+                    else if (idx == indexBombillos) extraBombillosCount++;
+                    lastAltExtraIndex = idx;
+                }
             }
 
             timeline.Add($"{hour},{mode},{prizes[idx].id}");
-            DailyReportService.RegisterSpin(prizes[idx], isSuerte);
+            DailyReportService.RegisterSpin(prizes[idx], isSuerte, isExtra);
+            UpdateStreaks(isSuerte);
         }
 
+        int RunSimSpin(int mode)
+        {
+            if (!extrasActive)
+            {
+                int idx = selector.RunOneSpin(mode);
+                bool isSuerte = indexSuerte >= 0 && idx == indexSuerte;
+                if (!isSuerte && idx >= 0 && idx != indexSuerte)
+                {
+                    currentRealStock = Mathf.Max(0, currentRealStock - 1);
+                    if (currentRealStock <= 0)
+                        extrasActive = true;
+                }
+                return idx;
+            }
+            else
+            {
+                bool forceSuerte = maxRealPrizesInRow > 0 && consecutiveReal >= maxRealPrizesInRow && indexSuerte >= 0;
+                bool forceReal = maxSuerteInRow > 0 && consecutiveSuerte >= maxSuerteInRow;
+
+                float pReal = ComputeExtraProbability(initialRealStock, currentRealStock, spinsDone, totalRuns);
+                float r = UnityEngine.Random.value;
+
+                if (forceSuerte || (!forceReal && r > pReal && indexSuerte >= 0))
+                {
+                    return indexSuerte;
+                }
+
+                int extraIdx = ChooseExtraPrizeIndex();
+                if (extraIdx < 0)
+                {
+                    return indexSuerte >= 0 ? indexSuerte : -1;
+                }
+                return extraIdx;
+            }
+        }
+
+        int totalSimSpins = runsM1 + runsM2 + runsM3;
         for (int i = 0; i < runsM1; i++)
         {
-            int idx = selector.RunOneSpin(1);
-            RegisterLocal(idx, 1);
+            int idx = RunSimSpin(1);
+            spinsDone++;
+            RegisterLocal(idx, extrasActive ? 4 : 1, extrasActive && idx != indexSuerte);
             t = t.Add(stepSpan);
         }
 
         for (int i = 0; i < runsM2; i++)
         {
-            int idx = selector.RunOneSpin(2);
-            RegisterLocal(idx, 2);
+            int idx = RunSimSpin(2);
+            spinsDone++;
+            RegisterLocal(idx, extrasActive ? 4 : 2, extrasActive && idx != indexSuerte);
             t = t.Add(stepSpan);
         }
 
         for (int i = 0; i < runsM3; i++)
         {
-            int idx = selector.RunOneSpin(3);
-            RegisterLocal(idx, 3);
+            int idx = RunSimSpin(3);
+            spinsDone++;
+            RegisterLocal(idx, extrasActive ? 4 : 3, extrasActive && idx != indexSuerte);
             t = t.Add(stepSpan);
         }
 
@@ -200,6 +292,8 @@ public class DaySimulator : MonoBehaviour
             }
 
             sw.WriteLine($"SUERTEPROXIMA,{suerteCount}");
+            sw.WriteLine($"TAZAS_EXTRA,{extraTazasCount}");
+            sw.WriteLine($"BOMBILLOS_EXTRA,{extraBombillosCount}");
         }
 
         Debug.Log("[Simulator] Archivo de resultados guardado: " + path);
@@ -216,5 +310,43 @@ public class DaySimulator : MonoBehaviour
         }
 
         Debug.Log("[Simulator] Timeline guardado: " + path);
+    }
+
+    float ComputeExtraProbability(int initialReal, int remainingReal, int spinsSoFar, int plannedSpins)
+    {
+        if (plannedSpins <= 0)
+            return maxRealPrizeProbability;
+
+        float dayProgress = Mathf.Clamp01((float)spinsSoFar / Mathf.Max(1, plannedSpins));
+        float expectedRatio = dayProgress;
+
+        int deliveredReal = Mathf.Clamp(initialReal - remainingReal, 0, Mathf.Max(1, initialReal));
+        float expectedDelivered = expectedRatio * initialReal;
+        float diff = expectedDelivered - deliveredReal;
+        float normalizedDiff = diff / Mathf.Max(1f, initialReal);
+
+        float baseProb = Mathf.Clamp01((float)initialReal / Mathf.Max(1f, plannedSpins));
+        float p = baseProb * (1f + 0.5f * normalizedDiff);
+        return Mathf.Clamp(p, minRealPrizeProbability, maxRealPrizeProbability);
+    }
+
+    int ChooseExtraPrizeIndex()
+    {
+        bool hasTazas = indexTazas >= 0;
+        bool hasBombillos = indexBombillos >= 0;
+
+        if (!hasTazas && !hasBombillos)
+            return -1;
+
+        if (lastAltExtraIndex < 0)
+            return hasTazas ? indexTazas : indexBombillos;
+
+        if (lastAltExtraIndex == indexTazas && hasBombillos)
+            return indexBombillos;
+
+        if (lastAltExtraIndex == indexBombillos && hasTazas)
+            return indexTazas;
+
+        return hasTazas ? indexTazas : indexBombillos;
     }
 }
